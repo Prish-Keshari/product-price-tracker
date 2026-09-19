@@ -1,7 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../config/supabase');
-const { deepSearchCatalog, fetchProductDetails, scrapeProductPrice } = require('../scraper/scraper');
+const {
+    deepSearchCatalog,
+    fetchProductDetails,
+    scrapeProductPrice
+} = require('../scraper/scraper');
 
 /**
  * GET /api/products/search?q=query

@@ -175,6 +175,9 @@ async function scrapeWithPlaywright(productId, layout, headed = false) {
             waitUntil: 'networkidle',
             timeout: 30000,
         });
+        await page.evaluate(() => {
+            document.querySelectorAll('.cookie-overlay').forEach(el => el.remove());
+        });
 
         // Wait for the page content to load
         await page.waitForTimeout(2000);
@@ -190,19 +193,38 @@ async function scrapeWithPlaywright(productId, layout, headed = false) {
 
         // Move mouse to the price area to trigger hover reveal
         try {
-            const priceWrap = await page.$(`.${priceWrapClass}`);
-            if (priceWrap) {
-                await priceWrap.hover();
-                await page.waitForTimeout(3000); // Dwell time for price reveal
+            // Completely disable the cookie overlay
+            await page.evaluate(() => {
+                document.querySelectorAll('.cookie-overlay').forEach(el => {
+                    el.style.display = 'none';
+                    el.style.visibility = 'hidden';
+                    el.style.pointerEvents = 'none';
+                });
+            });
 
-                // Some stores require click
-                await priceWrap.click().catch(() => { });
+            const priceWrap = page.locator(`.${priceWrapClass}`).first();
+
+            if (await priceWrap.count()) {
+                await priceWrap.scrollIntoViewIfNeeded();
+
+                // Force hover so Playwright ignores pointer interception
+                await priceWrap.hover({ force: true });
+
+                await page.waitForTimeout(3000);
+
+                // Try clicking only if necessary
+                try {
+                    await priceWrap.click({ force: true, timeout: 2000 });
+                } catch { }
+
                 await page.waitForTimeout(2000);
+            } else {
+                console.log('[Scraper] Price wrapper not found:', priceWrapClass);
             }
+
         } catch (e) {
             console.log('[Scraper] Price reveal interaction:', e.message);
         }
-
         // Extract price from the rendered page
         const priceData = await page.evaluate(({ priceValueClass, stockClass, saleClass, mrpClass, priceTag }) => {
             let price = null;
