@@ -167,7 +167,24 @@ async function scrapeWithPlaywright(productId, layout, headed = false) {
         const context = await browser.newContext({
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         });
+        await context.addInitScript(() => {
+            const removeCookieOverlay = () => {
+                document.querySelectorAll('.cookie-overlay').forEach(el => {
+                    el.remove();
+                });
+            };
 
+            removeCookieOverlay();
+
+            const observer = new MutationObserver(() => {
+                removeCookieOverlay();
+            });
+
+            observer.observe(document.documentElement, {
+                childList: true,
+                subtree: true
+            });
+        });
         const page = await context.newPage();
 
         // Navigate to product page
@@ -175,9 +192,7 @@ async function scrapeWithPlaywright(productId, layout, headed = false) {
             waitUntil: 'networkidle',
             timeout: 30000,
         });
-        await page.evaluate(() => {
-            document.querySelectorAll('.cookie-overlay').forEach(el => el.remove());
-        });
+
 
         // Wait for the page content to load
         await page.waitForTimeout(2000);
@@ -192,39 +207,38 @@ async function scrapeWithPlaywright(productId, layout, headed = false) {
         const priceTag = layout.priceTag || 'output';
 
         // Move mouse to the price area to trigger hover reveal
+        // Move mouse to the price area to trigger hover reveal
         try {
-            // Completely disable the cookie overlay
-            await page.evaluate(() => {
-                document.querySelectorAll('.cookie-overlay').forEach(el => {
-                    el.style.display = 'none';
-                    el.style.visibility = 'hidden';
-                    el.style.pointerEvents = 'none';
-                });
-            });
-
             const priceWrap = page.locator(`.${priceWrapClass}`).first();
 
             if (await priceWrap.count()) {
                 await priceWrap.scrollIntoViewIfNeeded();
 
-                // Force hover so Playwright ignores pointer interception
-                await priceWrap.hover({ force: true });
+                await priceWrap.hover({
+                    force: true,
+                    timeout: 10000
+                });
 
                 await page.waitForTimeout(3000);
 
-                // Try clicking only if necessary
                 try {
-                    await priceWrap.click({ force: true, timeout: 2000 });
+                    await priceWrap.click({
+                        force: true,
+                        timeout: 2000
+                    });
                 } catch { }
 
                 await page.waitForTimeout(2000);
             } else {
                 console.log('[Scraper] Price wrapper not found:', priceWrapClass);
             }
-
         } catch (e) {
             console.log('[Scraper] Price reveal interaction:', e.message);
         }
+        console.log('[Scraper] Price wrapper:', priceWrapClass);
+        console.log('[Scraper] Price value class:', priceValueClass);
+        console.log('[Scraper] Sale class:', saleClass);
+        console.log('[Scraper] MRP class:', mrpClass);
         // Extract price from the rendered page
         const priceData = await page.evaluate(({ priceValueClass, stockClass, saleClass, mrpClass, priceTag }) => {
             let price = null;
