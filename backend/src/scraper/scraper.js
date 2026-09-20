@@ -533,7 +533,47 @@ async function scrapeWithPlaywright(
                     force: true,
                     timeout: 5000,
                 });
+                await page.waitForTimeout(2000);
 
+                console.log(
+                    "[DEBUG] URL after reveal:",
+                    page.url()
+                );
+
+                console.log(
+                    "[DEBUG] Page title:",
+                    await page.title()
+                );
+
+                console.log(
+                    "[DEBUG] Body text after reveal:"
+                );
+
+                console.log(
+                    (await page.locator("body").innerText())
+                        .slice(0, 10000)
+                );
+
+                console.log(
+                    "[DEBUG] HTML around price wrapper:"
+                );
+
+                console.log(
+                    await page
+                        .locator(`.${priceWrapClass}`)
+                        .first()
+                        .evaluate(el => el.outerHTML)
+                        .catch(() => "PRICE WRAPPER NOT FOUND")
+                );
+                console.log(
+                    "[DEBUG] All buttons after reveal:"
+                );
+
+                console.log(
+                    await page
+                        .locator("button")
+                        .allTextContents()
+                );
                 console.log(
                     "[Scraper] Reveal Price clicked"
                 );
