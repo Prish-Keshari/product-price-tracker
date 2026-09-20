@@ -1,36 +1,40 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-const MOCK_STORE_BASE = process.env.MOCK_STORE_BASE_URL || 'https://demo.inelabteamdev.com';
+const MOCK_STORE_BASE =
+    process.env.MOCK_STORE_BASE_URL || 'https://demo.inelabteamdev.com';
 
 /**
  * Fetch the layout configuration from the mock store.
- * This contains dynamic CSS class names for price elements and other UI config.
  */
 async function fetchLayout() {
-    const res = await axios.get(`${MOCK_STORE_BASE}/api/layout`, { timeout: 15000 });
+    const res = await axios.get(`${MOCK_STORE_BASE}/api/layout`, {
+        timeout: 15000,
+    });
+
     return res.data;
 }
 
 /**
  * Search the catalog for products matching a query.
- * Returns paginated results from the mock store's catalog API.
  */
 async function searchCatalog(query, page = 1, pageSize = 20) {
     const res = await axios.get(`${MOCK_STORE_BASE}/api/catalog`, {
         params: { page, pageSize },
         timeout: 15000,
     });
+
     const data = res.data;
 
-    // Filter by name/brand/category if query provided
     if (query && query.trim()) {
         const q = query.toLowerCase().trim();
-        data.items = data.items.filter(item =>
-            item.name.toLowerCase().includes(q) ||
-            item.brand.toLowerCase().includes(q) ||
-            item.category.toLowerCase().includes(q) ||
-            item.sku.toLowerCase().includes(q)
+
+        data.items = data.items.filter(
+            (item) =>
+                item.name.toLowerCase().includes(q) ||
+                item.brand.toLowerCase().includes(q) ||
+                item.category.toLowerCase().includes(q) ||
+                item.sku.toLowerCase().includes(q)
         );
     }
 
@@ -38,7 +42,7 @@ async function searchCatalog(query, page = 1, pageSize = 20) {
 }
 
 /**
- * Search across multiple pages of catalog for better results.
+ * Search across multiple pages of catalog.
  */
 async function deepSearchCatalog(query, maxPages = 10) {
     const results = [];
@@ -47,23 +51,31 @@ async function deepSearchCatalog(query, maxPages = 10) {
     for (let page = 1; page <= maxPages; page++) {
         try {
             const res = await axios.get(`${MOCK_STORE_BASE}/api/catalog`, {
-                params: { page, pageSize: 100 },
+                params: {
+                    page,
+                    pageSize: 100,
+                },
                 timeout: 15000,
             });
 
-            const matching = res.data.items.filter(item =>
-                item.name.toLowerCase().includes(q) ||
-                item.brand.toLowerCase().includes(q) ||
-                item.category.toLowerCase().includes(q) ||
-                item.sku.toLowerCase().includes(q)
+            const matching = res.data.items.filter(
+                (item) =>
+                    item.name.toLowerCase().includes(q) ||
+                    item.brand.toLowerCase().includes(q) ||
+                    item.category.toLowerCase().includes(q) ||
+                    item.sku.toLowerCase().includes(q)
             );
 
             results.push(...matching);
 
-            // If we have enough results or reached the end
-            if (results.length >= 50 || page >= res.data.pages) break;
+            if (results.length >= 50 || page >= res.data.pages) {
+                break;
+            }
         } catch (err) {
-            console.error(`Error fetching catalog page ${page}:`, err.message);
+            console.error(
+                `Error fetching catalog page ${page}:`,
+                err.message
+            );
             break;
         }
     }
@@ -72,25 +84,21 @@ async function deepSearchCatalog(query, maxPages = 10) {
 }
 
 /**
- * Fetch full product details from the mock store.
+ * Fetch full product details.
  */
 async function fetchProductDetails(productId) {
-    const res = await axios.get(`${MOCK_STORE_BASE}/api/product/${productId}`, { timeout: 15000 });
+    const res = await axios.get(
+        `${MOCK_STORE_BASE}/api/product/${productId}`,
+        {
+            timeout: 15000,
+        }
+    );
+
     return res.data;
 }
 
 /**
- * Scrape the product page to extract price and stock information.
- * 
- * The mock store uses dynamic CSS classes from /api/layout to obfuscate price data.
- * Price is rendered as a split value (priceCarrier: "split") inside an <output> tag (priceTag: "output").
- * 
- * Strategy:
- * 1. GET the layout config for current CSS class names
- * 2. GET the product page HTML
- * 3. Use Playwright to render the page and extract price/stock from the dynamically-generated DOM
- * 
- * If Playwright is not available, falls back to API-based extraction attempts.
+ * Scrape product price and stock.
  */
 async function scrapeProductPrice(productId, options = {}) {
     const startTime = Date.now();
@@ -99,13 +107,17 @@ async function scrapeProductPrice(productId, options = {}) {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            console.log(`[Scraper] Attempt ${attempt}/${maxRetries} for product ${productId}`);
+            console.log(
+                `[Scraper] Attempt ${attempt}/${maxRetries} for product ${productId}`
+            );
 
-            // First, get the layout config to know CSS class names
             const layout = await fetchLayout();
 
-            // Try lightweight approach first: fetch product page and parse
-            const result = await scrapeWithPlaywright(productId, layout, options.headed || false);
+            const result = await scrapeWithPlaywright(
+                productId,
+                layout,
+                options.headed || false
+            );
 
             if (result && result.price !== null) {
                 return {
@@ -124,13 +136,20 @@ async function scrapeProductPrice(productId, options = {}) {
             throw new Error('Price extraction returned null');
         } catch (error) {
             lastError = error;
-            console.error(`[Scraper] Attempt ${attempt} failed for product ${productId}:`, error.message);
+
+            console.error(
+                `[Scraper] Attempt ${attempt} failed for product ${productId}:`,
+                error.message
+            );
 
             if (attempt < maxRetries) {
-                // Exponential backoff: 2s, 4s, 8s...
                 const waitMs = Math.pow(2, attempt) * 1000;
+
                 console.log(`[Scraper] Retrying in ${waitMs}ms...`);
-                await new Promise(resolve => setTimeout(resolve, waitMs));
+
+                await new Promise((resolve) =>
+                    setTimeout(resolve, waitMs)
+                );
             }
         }
     }
@@ -150,8 +169,40 @@ async function scrapeProductPrice(productId, options = {}) {
 }
 
 /**
- * Use Playwright to render the product page and extract price/stock.
- * The mock store requires JS execution and mouse interaction (hover dwell) to reveal prices.
+ * Remove the cookie overlay from the page.
+ */
+async function removeCookieOverlay(page) {
+    try {
+        await page.evaluate(() => {
+            const removeOverlay = () => {
+                document
+                    .querySelectorAll('.cookie-overlay')
+                    .forEach((el) => {
+                        el.remove();
+                    });
+            };
+
+            removeOverlay();
+
+            // Also disable pointer events if the overlay is recreated.
+            document
+                .querySelectorAll('.cookie-overlay')
+                .forEach((el) => {
+                    el.style.display = 'none';
+                    el.style.visibility = 'hidden';
+                    el.style.pointerEvents = 'none';
+                });
+        });
+    } catch (error) {
+        console.log(
+            '[Scraper] Cookie overlay removal:',
+            error.message
+        );
+    }
+}
+
+/**
+ * Use Playwright to render product page and extract price/stock.
  */
 async function scrapeWithPlaywright(productId, layout, headed = false) {
     let browser = null;
@@ -159,18 +210,53 @@ async function scrapeWithPlaywright(productId, layout, headed = false) {
     try {
         const { chromium } = require('playwright');
 
+        console.log(`[Scraper] Starting Playwright for product ${productId}`);
+
         browser = await chromium.launch({
             headless: !headed,
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-blink-features=AutomationControlled'
+            ]
         });
 
         const context = await browser.newContext({
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            userAgent:
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            viewport: {
+                width: 1366,
+                height: 768
+            }
         });
+
+        /*
+         * Remove cookie overlays as early as possible.
+         */
         await context.addInitScript(() => {
             const removeCookieOverlay = () => {
-                document.querySelectorAll('.cookie-overlay').forEach(el => {
-                    el.remove();
+                const selectors = [
+                    '.cookie-overlay',
+                    '[class*="cookie-overlay"]',
+                    '[id*="cookie-overlay"]',
+                    '[class*="cookie"]',
+                    '[id*="cookie"]'
+                ];
+
+                selectors.forEach(selector => {
+                    document.querySelectorAll(selector).forEach(el => {
+                        try {
+                            el.remove();
+                        } catch (_) {
+                            try {
+                                el.style.display = 'none';
+                                el.style.visibility = 'hidden';
+                                el.style.pointerEvents = 'none';
+                            } catch (_) { }
+                        }
+                    });
                 });
             };
 
@@ -180,163 +266,702 @@ async function scrapeWithPlaywright(productId, layout, headed = false) {
                 removeCookieOverlay();
             });
 
-            observer.observe(document.documentElement, {
-                childList: true,
-                subtree: true
-            });
+            const startObserver = () => {
+                if (document.documentElement) {
+                    observer.observe(document.documentElement, {
+                        childList: true,
+                        subtree: true
+                    });
+                }
+            };
+
+            if (document.readyState === 'loading') {
+                document.addEventListener(
+                    'DOMContentLoaded',
+                    startObserver,
+                    { once: true }
+                );
+            } else {
+                startObserver();
+            }
         });
+
         const page = await context.newPage();
 
-        // Navigate to product page
-        await page.goto(`${MOCK_STORE_BASE}/product/${productId}`, {
-            waitUntil: 'networkidle',
-            timeout: 30000,
+        /*
+         * Navigate to product page.
+         */
+        const productUrl =
+            `${MOCK_STORE_BASE}/product/${productId}`;
+
+        console.log(`[Scraper] Opening: ${productUrl}`);
+
+        await page.goto(productUrl, {
+            waitUntil: 'domcontentloaded',
+            timeout: 30000
         });
 
+        /*
+         * Allow React/JavaScript to render.
+         */
+        await page.waitForTimeout(3000);
 
-        // Wait for the page content to load
-        await page.waitForTimeout(2000);
-
-        // The price block requires hovering/dwelling to reveal. 
-        // Try to find and interact with the price container
-        const priceWrapClass = layout.classes?.priceWrap || 'pw-m4';
-        const priceValueClass = layout.classes?.priceValue || 'pv-m4';
-        const stockClass = layout.classes?.stock || 'st-m4';
-        const saleClass = layout.classes?.sale || 'sl-m4';
-        const mrpClass = layout.classes?.mrp || 'mr-m4';
-        const priceTag = layout.priceTag || 'output';
-
-        // Move mouse to the price area to trigger hover reveal
-        // Move mouse to the price area to trigger hover reveal
-        try {
-            const priceWrap = page.locator(`.${priceWrapClass}`).first();
-
-            if (await priceWrap.count()) {
-                await priceWrap.scrollIntoViewIfNeeded();
-
-                await priceWrap.hover({
-                    force: true,
-                    timeout: 10000
+        /*
+         * Remove cookie overlays and disable them with CSS.
+         */
+        const disableCookieOverlay = async () => {
+            try {
+                await page.addStyleTag({
+                    content: `
+                        .cookie-overlay,
+                        [class*="cookie-overlay"],
+                        [id*="cookie-overlay"],
+                        [class*="cookie"],
+                        [id*="cookie"] {
+                            display: none !important;
+                            visibility: hidden !important;
+                            opacity: 0 !important;
+                            pointer-events: none !important;
+                            z-index: -999999 !important;
+                        }
+                    `
                 });
+            } catch (_) { }
 
-                await page.waitForTimeout(3000);
+            try {
+                await page.evaluate(() => {
+                    const selectors = [
+                        '.cookie-overlay',
+                        '[class*="cookie-overlay"]',
+                        '[id*="cookie-overlay"]'
+                    ];
 
-                try {
-                    await priceWrap.click({
-                        force: true,
-                        timeout: 2000
+                    selectors.forEach(selector => {
+                        document.querySelectorAll(selector).forEach(el => {
+                            el.remove();
+                        });
                     });
-                } catch { }
+                });
+            } catch (_) { }
+        };
+
+        await disableCookieOverlay();
+
+        /*
+         * Get dynamic classes from layout.
+         */
+        const priceWrapClass =
+            layout?.classes?.priceWrap || 'pw-m4';
+
+        const priceValueClass =
+            layout?.classes?.priceValue || 'pv-m4';
+
+        const stockClass =
+            layout?.classes?.stock || 'st-m4';
+
+        const saleClass =
+            layout?.classes?.sale || 'sl-m4';
+
+        const mrpClass =
+            layout?.classes?.mrp || 'mr-m4';
+
+        const priceTag =
+            layout?.priceTag || 'output';
+
+        console.log(
+            `[Scraper] Price wrapper: ${priceWrapClass}`
+        );
+
+        console.log(
+            `[Scraper] Price value class: ${priceValueClass}`
+        );
+
+        console.log(
+            `[Scraper] Sale class: ${saleClass}`
+        );
+
+        console.log(
+            `[Scraper] MRP class: ${mrpClass}`
+        );
+
+        /*
+         * Create selectors.
+         */
+        const makeClassSelector = className => {
+            return className
+                .split(/\s+/)
+                .filter(Boolean)
+                .map(name => `.${name}`)
+                .join('');
+        };
+
+        const priceWrapSelector =
+            makeClassSelector(priceWrapClass);
+
+        const priceValueSelector =
+            makeClassSelector(priceValueClass);
+
+        const saleSelector =
+            makeClassSelector(saleClass);
+
+        const mrpSelector =
+            makeClassSelector(mrpClass);
+
+        const stockSelector =
+            makeClassSelector(stockClass);
+
+        /*
+         * Locate price wrapper.
+         */
+        const priceWrap =
+            page.locator(priceWrapSelector).first();
+
+        const wrapperCount =
+            await priceWrap.count();
+
+        console.log(
+            `[Scraper] Price wrapper count: ${wrapperCount}`
+        );
+
+        if (wrapperCount === 0) {
+            console.log(
+                `[Scraper] Price wrapper not found: ${priceWrapClass}`
+            );
+
+            /*
+             * Try locating price directly if wrapper is missing.
+             */
+            const directPrice =
+                page.locator(
+                    `${saleSelector}, ${priceValueSelector}, ${priceTag}`
+                ).first();
+
+            if (await directPrice.count() === 0) {
+                return null;
+            }
+        }
+
+        /*
+         * Remove cookie overlay immediately before interaction.
+         */
+        await disableCookieOverlay();
+
+        /*
+         * Scroll to price section.
+         */
+        if (wrapperCount > 0) {
+            try {
+                await priceWrap.scrollIntoViewIfNeeded();
+            } catch (_) { }
+        }
+
+        await page.waitForTimeout(500);
+
+        /*
+         * Get price wrapper bounding box.
+         */
+        let box = null;
+
+        if (wrapperCount > 0) {
+            box = await priceWrap.boundingBox();
+        }
+
+        /*
+         * Trigger hover manually using mouse.
+         *
+         * We intentionally DO NOT use locator.hover().
+         * Your Render logs showed that Playwright's hover action
+         * was repeatedly blocked by cookie-overlay.
+         */
+        if (box) {
+            const centerX = box.x + box.width / 2;
+            const centerY = box.y + box.height / 2;
+
+            console.log(
+                `[Scraper] Moving mouse to price area: ${centerX}, ${centerY}`
+            );
+
+            await page.mouse.move(
+                centerX,
+                centerY,
+                { steps: 10 }
+            );
+
+            await page.waitForTimeout(1000);
+
+            /*
+             * Move around the price area to trigger
+             * mouseenter / mousemove / hover listeners.
+             */
+            await page.mouse.move(
+                box.x + box.width * 0.25,
+                box.y + box.height * 0.5,
+                { steps: 5 }
+            );
+
+            await page.waitForTimeout(500);
+
+            await page.mouse.move(
+                box.x + box.width * 0.75,
+                box.y + box.height * 0.5,
+                { steps: 5 }
+            );
+
+            await page.waitForTimeout(3000);
+
+            console.log(
+                '[Scraper] Price hover/dwell completed'
+            );
+        }
+
+        /*
+         * Dispatch JavaScript mouse/pointer events directly.
+         * This handles stores that use event listeners instead
+         * of pure CSS :hover.
+         */
+        if (wrapperCount > 0) {
+            try {
+                await priceWrap.evaluate(element => {
+                    const events = [
+                        'pointerover',
+                        'pointerenter',
+                        'mouseover',
+                        'mouseenter',
+                        'mousemove'
+                    ];
+
+                    events.forEach(type => {
+                        try {
+                            element.dispatchEvent(
+                                new MouseEvent(type, {
+                                    bubbles: true,
+                                    cancelable: true,
+                                    view: window
+                                })
+                            );
+                        } catch (_) { }
+                    });
+                });
+            } catch (error) {
+                console.log(
+                    '[Scraper] Event dispatch skipped:',
+                    error.message
+                );
+            }
+        }
+
+        /*
+         * Give the price reveal animation enough time.
+         */
+        await page.waitForTimeout(3000);
+
+        /*
+         * Some layouts require clicking the price area.
+         * Use mouse click instead of locator.click() so that
+         * Playwright actionability checks cannot get stuck.
+         */
+        if (box) {
+            try {
+                await disableCookieOverlay();
+
+                await page.mouse.click(
+                    box.x + box.width / 2,
+                    box.y + box.height / 2
+                );
+
+                console.log(
+                    '[Scraper] Price wrapper clicked'
+                );
 
                 await page.waitForTimeout(2000);
-            } else {
-                console.log('[Scraper] Price wrapper not found:', priceWrapClass);
+            } catch (error) {
+                console.log(
+                    '[Scraper] Click skipped:',
+                    error.message
+                );
             }
-        } catch (e) {
-            console.log('[Scraper] Price reveal interaction:', e.message);
         }
-        console.log('[Scraper] Price wrapper:', priceWrapClass);
-        console.log('[Scraper] Price value class:', priceValueClass);
-        console.log('[Scraper] Sale class:', saleClass);
-        console.log('[Scraper] MRP class:', mrpClass);
-        // Extract price from the rendered page
-        const priceData = await page.evaluate(({ priceValueClass, stockClass, saleClass, mrpClass, priceTag }) => {
-            let price = null;
-            let originalPrice = null;
-            let stock = null;
 
-            // Try to find price elements using the dynamic class names
-            // Sale price (current/discounted price)
-            const saleEl = document.querySelector(`.${saleClass}`);
-            if (saleEl) {
-                const saleText = saleEl.textContent.trim();
-                const saleMatch = saleText.match(/[\d,]+\.?\d*/);
-                if (saleMatch) price = parseFloat(saleMatch[0].replace(/,/g, ''));
-            }
+        /*
+         * Remove overlay again in case it was recreated.
+         */
+        await disableCookieOverlay();
 
-            // MRP (original price)
-            const mrpEl = document.querySelector(`.${mrpClass}`);
-            if (mrpEl) {
-                const mrpText = mrpEl.textContent.trim();
-                const mrpMatch = mrpText.match(/[\d,]+\.?\d*/);
-                if (mrpMatch) originalPrice = parseFloat(mrpMatch[0].replace(/,/g, ''));
-            }
+        /*
+         * Read the actual price wrapper HTML.
+         * This is extremely useful when debugging Render.
+         */
+        let priceHtml = '';
 
-            // If no separate sale/mrp, try the priceValue class
-            if (price === null) {
-                const pvEl = document.querySelector(`.${priceValueClass}`);
-                if (pvEl) {
-                    const pvText = pvEl.textContent.trim();
-                    const pvMatch = pvText.match(/[\d,]+\.?\d*/);
-                    if (pvMatch) price = parseFloat(pvMatch[0].replace(/,/g, ''));
-                }
-            }
+        if (wrapperCount > 0) {
+            try {
+                priceHtml = await priceWrap.evaluate(
+                    element => element.outerHTML
+                );
 
-            // Try the price tag (output element)
-            if (price === null) {
-                const outputEl = document.querySelector(priceTag);
-                if (outputEl) {
-                    const outputText = outputEl.textContent.trim();
-                    const outputMatch = outputText.match(/[\d,]+\.?\d*/);
-                    if (outputMatch) price = parseFloat(outputMatch[0].replace(/,/g, ''));
-                }
-            }
+                console.log(
+                    '[Scraper] Price wrapper HTML:',
+                    priceHtml.substring(0, 2500)
+                );
+            } catch (_) { }
+        }
 
-            // Brute force: search all text content for ₹ symbol
-            if (price === null) {
-                const allText = document.body.innerText;
-                const priceMatches = allText.match(/₹\s*[\d,]+\.?\d*/g);
-                if (priceMatches && priceMatches.length > 0) {
-                    const firstPrice = priceMatches[0].replace(/₹\s*/, '').replace(/,/g, '');
-                    price = parseFloat(firstPrice);
-                    if (priceMatches.length > 1) {
-                        const secondPrice = priceMatches[1].replace(/₹\s*/, '').replace(/,/g, '');
-                        originalPrice = parseFloat(secondPrice);
+        /*
+         * Extract price from the rendered DOM.
+         *
+         * IMPORTANT:
+         * We first search INSIDE the price wrapper.
+         * This prevents unrelated numbers on the page
+         * from being selected as the product price.
+         */
+        const priceData = await page.evaluate(
+            ({
+                priceWrapSelector,
+                priceValueSelector,
+                saleSelector,
+                mrpSelector,
+                stockSelector,
+                priceTag
+            }) => {
+
+                const cleanText = value => {
+                    if (!value) return null;
+
+                    return String(value)
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                };
+
+                /*
+                 * Extract currency/number from text.
+                 */
+                const extractPrice = value => {
+                    const text = cleanText(value);
+
+                    if (!text) return null;
+
+                    /*
+                     * Currency formats:
+                     * ₹1,999
+                     * ₹ 1,999
+                     * Rs. 1,999
+                     * INR 1,999
+                     * $99
+                     * €99
+                     * £99
+                     */
+                    const currencyMatch = text.match(
+                        /(?:₹|Rs\.?|INR|\$|€|£)\s*[\d,]+(?:\.\d{1,2})?/i
+                    );
+
+                    if (currencyMatch) {
+                        return currencyMatch[0]
+                            .replace(/\s+/g, ' ')
+                            .trim();
+                    }
+
+                    /*
+                     * Plain numeric fallback.
+                     */
+                    const numberMatch = text.match(
+                        /\b\d[\d,]*(?:\.\d{1,2})?\b/
+                    );
+
+                    return numberMatch
+                        ? numberMatch[0]
+                        : null;
+                };
+
+                /*
+                 * Safely get text from an element.
+                 */
+                const getText = element => {
+                    if (!element) return null;
+
+                    const values = [
+                        element.textContent,
+                        element.innerText,
+                        element.getAttribute('aria-label'),
+                        element.getAttribute('title'),
+                        element.getAttribute('data-price'),
+                        element.getAttribute('data-value'),
+                        element.getAttribute('content')
+                    ];
+
+                    for (const value of values) {
+                        const text = cleanText(value);
+
+                        if (text) {
+                            return text;
+                        }
+                    }
+
+                    return null;
+                };
+
+                /*
+                 * Find the wrapper.
+                 */
+                let wrapper =
+                    document.querySelector(priceWrapSelector);
+
+                /*
+                 * Find price element.
+                 */
+                let priceElement = null;
+
+                if (wrapper) {
+                    priceElement =
+                        wrapper.querySelector(saleSelector);
+
+                    if (!priceElement) {
+                        priceElement =
+                            wrapper.querySelector(priceValueSelector);
+                    }
+
+                    if (!priceElement) {
+                        priceElement =
+                            wrapper.querySelector(priceTag);
                     }
                 }
-            }
 
-            // Extract stock information
-            const stockEl = document.querySelector(`.${stockClass}`);
-            if (stockEl) {
-                const stockText = stockEl.textContent.trim().toLowerCase();
-                if (stockText.includes('in stock')) {
-                    const stockMatch = stockText.match(/(\d+)/);
-                    stock = stockMatch ? parseInt(stockMatch[1]) : -1; // -1 means "in stock" but quantity unknown
-                } else if (stockText.includes('out of stock')) {
-                    stock = 0;
-                } else {
-                    const stockMatch = stockText.match(/(\d+)/);
-                    stock = stockMatch ? parseInt(stockMatch[1]) : null;
+                /*
+                 * Global fallback.
+                 */
+                if (!priceElement) {
+                    priceElement =
+                        document.querySelector(saleSelector);
                 }
-            }
 
-            // Fallback: search for stock text in page  
-            if (stock === null) {
-                const allText = document.body.innerText.toLowerCase();
-                if (allText.includes('out of stock')) {
-                    stock = 0;
-                } else if (allText.includes('in stock')) {
-                    const stockMatch = allText.match(/(\d+)\s*(?:left|remaining|in stock|available)/i);
-                    stock = stockMatch ? parseInt(stockMatch[1]) : -1;
+                if (!priceElement) {
+                    priceElement =
+                        document.querySelector(priceValueSelector);
                 }
+
+                if (!priceElement) {
+                    priceElement =
+                        document.querySelector(priceTag);
+                }
+
+                /*
+                 * Extract current price.
+                 */
+                let price = null;
+
+                if (priceElement) {
+                    price =
+                        extractPrice(getText(priceElement));
+                }
+
+                /*
+                 * Try all relevant elements inside wrapper.
+                 */
+                if (!price && wrapper) {
+                    const elements = wrapper.querySelectorAll(
+                        `${saleSelector}, ${priceValueSelector}, ${priceTag}, ` +
+                        '[data-price], [data-value], [aria-label], [title]'
+                    );
+
+                    for (const element of elements) {
+                        const value =
+                            extractPrice(getText(element));
+
+                        if (value) {
+                            price = value;
+                            break;
+                        }
+                    }
+                }
+
+                /*
+                 * Wrapper text fallback.
+                 */
+                if (!price && wrapper) {
+                    price =
+                        extractPrice(getText(wrapper));
+                }
+
+                /*
+                 * Final page-wide price fallback.
+                 */
+                if (!price) {
+                    const candidates =
+                        document.querySelectorAll(
+                            `${saleSelector}, ${priceValueSelector}, ` +
+                            '[data-price], [data-value], output, ' +
+                            '[class*="price"], [class*="Price"]'
+                        );
+
+                    for (const element of candidates) {
+                        const value =
+                            extractPrice(getText(element));
+
+                        if (value) {
+                            price = value;
+                            break;
+                        }
+                    }
+                }
+
+                /*
+                 * Original/MRP price.
+                 */
+                let originalPrice = null;
+
+                let mrpElement = null;
+
+                if (wrapper) {
+                    mrpElement =
+                        wrapper.querySelector(mrpSelector);
+                }
+
+                if (!mrpElement) {
+                    mrpElement =
+                        document.querySelector(mrpSelector);
+                }
+
+                if (mrpElement) {
+                    originalPrice =
+                        extractPrice(getText(mrpElement));
+                }
+
+                /*
+                 * Stock information.
+                 */
+                let stock = null;
+
+                let stockElement = null;
+
+                if (wrapper) {
+                    stockElement =
+                        wrapper.querySelector(stockSelector);
+                }
+
+                if (!stockElement) {
+                    stockElement =
+                        document.querySelector(stockSelector);
+                }
+
+                if (stockElement) {
+                    stock = cleanText(
+                        getText(stockElement)
+                    );
+                }
+
+                /*
+                 * Additional stock fallback.
+                 */
+                if (!stock && wrapper) {
+                    const wrapperText =
+                        cleanText(wrapper.innerText);
+
+                    if (wrapperText) {
+                        if (/out\s*of\s*stock/i.test(wrapperText)) {
+                            stock = 'Out of stock';
+                        } else if (/in\s*stock/i.test(wrapperText)) {
+                            stock = 'In stock';
+                        }
+                    }
+                }
+
+                return {
+                    price,
+                    originalPrice,
+                    stock,
+
+                    /*
+                     * Debug information.
+                     */
+                    wrapperText:
+                        wrapper
+                            ? cleanText(wrapper.innerText)
+                            : null,
+
+                    priceElementText:
+                        priceElement
+                            ? cleanText(getText(priceElement))
+                            : null
+                };
+            },
+            {
+                priceWrapSelector,
+                priceValueSelector,
+                saleSelector,
+                mrpSelector,
+                stockSelector,
+                priceTag
             }
+        );
 
-            return { price, originalPrice, stock };
-        }, { priceValueClass, stockClass, saleClass, mrpClass, priceTag });
+        console.log(
+            '[Scraper] Extracted price:',
+            priceData.price
+        );
 
-        await browser.close();
-        return priceData;
+        console.log(
+            '[Scraper] Extracted original price:',
+            priceData.originalPrice
+        );
+
+        console.log(
+            '[Scraper] Extracted stock:',
+            priceData.stock
+        );
+
+        console.log(
+            '[Scraper] Wrapper text:',
+            priceData.wrapperText
+        );
+
+        console.log(
+            '[Scraper] Price element text:',
+            priceData.priceElementText
+        );
+
+        /*
+         * Final validation.
+         */
+        if (!priceData.price) {
+            console.log(
+                `[Scraper] Price extraction returned null for product ${productId}`
+            );
+
+            return null;
+        }
+
+        /*
+         * Successful result.
+         */
+        console.log(
+            `[Scraper] Successfully extracted price for product ${productId}: ${priceData.price}`
+        );
+
+        return {
+            price: priceData.price,
+            originalPrice: priceData.originalPrice,
+            stock: priceData.stock
+        };
+
     } catch (error) {
-        if (browser) await browser.close().catch(() => { });
-        throw error;
+
+        console.error(
+            `[Scraper] Playwright error for product ${productId}:`,
+            error.message
+        );
+
+        return null;
+
+    } finally {
+
+        if (browser) {
+            try {
+                await browser.close();
+            } catch (error) {
+                console.log(
+                    '[Scraper] Browser close error:',
+                    error.message
+                );
+            }
+        }
     }
 }
-
-module.exports = {
-    fetchLayout,
-    searchCatalog,
-    deepSearchCatalog,
-    fetchProductDetails,
-    scrapeProductPrice,
-};
