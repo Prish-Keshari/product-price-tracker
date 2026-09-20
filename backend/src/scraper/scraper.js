@@ -1,28 +1,36 @@
 const axios = require('axios');
 
 const MOCK_STORE_BASE =
-    process.env.MOCK_STORE_BASE_URL || 'https://demo.inelabteamdev.com';
+    process.env.MOCK_STORE_BASE_URL ||
+    'https://demo.inelabteamdev.com';
 
-/**
- * Fetch dynamic layout configuration.
- */
+/* =========================================================
+   API HELPERS
+========================================================= */
+
 async function fetchLayout() {
     const res = await axios.get(
         `${MOCK_STORE_BASE}/api/layout`,
-        { timeout: 15000 }
+        {
+            timeout: 15000,
+        }
     );
 
     return res.data;
 }
 
-/**
- * Search catalog.
- */
-async function searchCatalog(query, page = 1, pageSize = 20) {
+async function searchCatalog(
+    query,
+    page = 1,
+    pageSize = 20
+) {
     const res = await axios.get(
         `${MOCK_STORE_BASE}/api/catalog`,
         {
-            params: { page, pageSize },
+            params: {
+                page,
+                pageSize,
+            },
             timeout: 15000,
         }
     );
@@ -44,14 +52,18 @@ async function searchCatalog(query, page = 1, pageSize = 20) {
     return data;
 }
 
-/**
- * Search across catalog pages.
- */
-async function deepSearchCatalog(query, maxPages = 10) {
+async function deepSearchCatalog(
+    query,
+    maxPages = 10
+) {
     const results = [];
     const q = query.toLowerCase().trim();
 
-    for (let page = 1; page <= maxPages; page++) {
+    for (
+        let page = 1;
+        page <= maxPages;
+        page++
+    ) {
         try {
             const res = await axios.get(
                 `${MOCK_STORE_BASE}/api/catalog`,
@@ -64,13 +76,14 @@ async function deepSearchCatalog(query, maxPages = 10) {
                 }
             );
 
-            const matching = res.data.items.filter(
-                (item) =>
-                    item.name?.toLowerCase().includes(q) ||
-                    item.brand?.toLowerCase().includes(q) ||
-                    item.category?.toLowerCase().includes(q) ||
-                    item.sku?.toLowerCase().includes(q)
-            );
+            const matching =
+                res.data.items.filter(
+                    (item) =>
+                        item.name?.toLowerCase().includes(q) ||
+                        item.brand?.toLowerCase().includes(q) ||
+                        item.category?.toLowerCase().includes(q) ||
+                        item.sku?.toLowerCase().includes(q)
+                );
 
             results.push(...matching);
 
@@ -93,9 +106,6 @@ async function deepSearchCatalog(query, maxPages = 10) {
     return results.slice(0, 50);
 }
 
-/**
- * Fetch product details.
- */
 async function fetchProductDetails(productId) {
     const res = await axios.get(
         `${MOCK_STORE_BASE}/api/product/${productId}`,
@@ -107,24 +117,18 @@ async function fetchProductDetails(productId) {
     return res.data;
 }
 
-/**
- * Main scraper.
- *
- * Important:
- * - Handles delayed cookie popup.
- * - Detects the grey/frozen page state.
- * - Reloads when initialization gets stuck.
- * - Accepts cookies normally.
- * - Hovers over price area.
- * - Waits for Reveal Price to become enabled.
- * - Clicks Reveal Price.
- * - Extracts price, MRP and stock.
- */
-async function scrapeProductPrice(productId, options = {}) {
+/* =========================================================
+   MAIN SCRAPER
+========================================================= */
+
+async function scrapeProductPrice(
+    productId,
+    options = {}
+) {
     const startTime = Date.now();
 
-    const maxRetries = options.maxRetries || 3;
-    const headed = options.headed || false;
+    const maxRetries =
+        options.maxRetries || 3;
 
     let lastError = null;
 
@@ -133,22 +137,24 @@ async function scrapeProductPrice(productId, options = {}) {
         attempt <= maxRetries;
         attempt++
     ) {
-        console.log(
-            `[Scraper] Attempt ${attempt}/${maxRetries}`
-        );
-
-        console.log(
-            `[Scraper] Starting product: ${productId}`
-        );
-
         try {
-            const layout = await fetchLayout();
-
-            const result = await scrapeWithPlaywright(
-                productId,
-                layout,
-                headed
+            console.log(
+                `[Scraper] Attempt ${attempt}/${maxRetries}`
             );
+
+            console.log(
+                `[Scraper] Starting product: ${productId}`
+            );
+
+            const layout =
+                await fetchLayout();
+
+            const result =
+                await scrapeWithPlaywright(
+                    productId,
+                    layout,
+                    options.headed || false
+                );
 
             if (
                 result &&
@@ -156,17 +162,20 @@ async function scrapeProductPrice(productId, options = {}) {
                 result.price > 0
             ) {
                 console.log(
-                    `[Scraper] SUCCESS - Price: ${result.price}`
+                    `[Scraper] SUCCESS price: ${result.price}`
                 );
 
                 return {
                     success: true,
                     productId,
                     price: result.price,
-                    originalPrice: result.originalPrice,
+                    originalPrice:
+                        result.originalPrice,
                     stock: result.stock,
-                    scrapedAt: new Date().toISOString(),
-                    duration: Date.now() - startTime,
+                    scrapedAt:
+                        new Date().toISOString(),
+                    duration:
+                        Date.now() - startTime,
                     attempt,
                     method: 'playwright',
                 };
@@ -191,8 +200,9 @@ async function scrapeProductPrice(productId, options = {}) {
                     `[Scraper] Retrying in ${waitMs}ms`
                 );
 
-                await new Promise((resolve) =>
-                    setTimeout(resolve, waitMs)
+                await new Promise(
+                    (resolve) =>
+                        setTimeout(resolve, waitMs)
                 );
             }
         }
@@ -204,215 +214,22 @@ async function scrapeProductPrice(productId, options = {}) {
         price: null,
         originalPrice: null,
         stock: null,
-        scrapedAt: new Date().toISOString(),
-        duration: Date.now() - startTime,
+        scrapedAt:
+            new Date().toISOString(),
+        duration:
+            Date.now() - startTime,
         attempt: maxRetries,
         method: 'playwright',
         error:
             lastError?.message ||
-            'Unknown scraper error',
+            'Unknown error',
     };
 }
 
-/**
- * Handle cookie popup.
- *
- * We DO NOT remove the cookie overlay before handling it.
- *
- * The site can take 2-3 seconds to create the popup.
- */
-async function handleCookieConsent(page) {
-    console.log(
-        '[Scraper] Checking for cookie consent...'
-    );
+/* =========================================================
+   PLAYWRIGHT SCRAPER
+========================================================= */
 
-    const acceptButton = page
-        .getByRole('button', {
-            name: /^accept$/i,
-        })
-        .first();
-
-    try {
-        await acceptButton.waitFor({
-            state: 'visible',
-            timeout: 8000,
-        });
-
-        console.log(
-            '[Scraper] Cookie consent found'
-        );
-
-        await acceptButton.click({
-            timeout: 5000,
-        });
-
-        console.log(
-            '[Scraper] Cookie ACCEPT clicked'
-        );
-
-        /*
-         * Give the site's JS time to remove the
-         * modal/backdrop.
-         */
-        await page.waitForTimeout(1000);
-
-        /*
-         * Wait for cookie overlay to disappear.
-         */
-        const overlay = page.locator(
-            '.cookie-overlay'
-        ).first();
-
-        if (await overlay.count()) {
-            await overlay
-                .waitFor({
-                    state: 'hidden',
-                    timeout: 5000,
-                })
-                .catch(() => { });
-        }
-
-        await page.waitForTimeout(500);
-
-        console.log(
-            '[Scraper] Cookie handling completed'
-        );
-
-        return true;
-    } catch (error) {
-        console.log(
-            '[Scraper] Cookie button not found yet'
-        );
-
-        return false;
-    }
-}
-
-/**
- * Detect whether the page is stuck behind the
- * grey cookie/modal overlay.
- */
-async function isPageBlocked(page) {
-    try {
-        return await page.evaluate(() => {
-            const overlay = document.querySelector(
-                '.cookie-overlay'
-            );
-
-            if (!overlay) {
-                return false;
-            }
-
-            const style =
-                window.getComputedStyle(overlay);
-
-            const rect =
-                overlay.getBoundingClientRect();
-
-            return (
-                style.display !== 'none' &&
-                style.visibility !== 'hidden' &&
-                parseFloat(style.opacity || '1') > 0 &&
-                rect.width > 0 &&
-                rect.height > 0
-            );
-        });
-    } catch {
-        return false;
-    }
-}
-
-/**
- * Wait for the page to initialize.
- *
- * If the site gets stuck with the grey overlay
- * and the cookie button never appears, reload.
- */
-async function initializePage(page, productId) {
-    console.log(
-        '[Scraper] Waiting for page initialization...'
-    );
-
-    await page.waitForTimeout(2500);
-
-    /*
-     * First try to handle cookie popup.
-     */
-    const cookieHandled =
-        await handleCookieConsent(page);
-
-    if (cookieHandled) {
-        return;
-    }
-
-    /*
-     * Cookie popup may not have appeared yet.
-     * Give it another chance.
-     */
-    console.log(
-        '[Scraper] Cookie not visible yet - waiting...'
-    );
-
-    await page.waitForTimeout(2500);
-
-    const cookieHandledAgain =
-        await handleCookieConsent(page);
-
-    if (cookieHandledAgain) {
-        return;
-    }
-
-    /*
-     * If the page still has the blocking overlay,
-     * the site is in the exact broken state seen
-     * during manual testing.
-     */
-    const blocked =
-        await isPageBlocked(page);
-
-    if (blocked) {
-        console.log(
-            '[Scraper] Page appears blocked/frozen'
-        );
-
-        console.log(
-            '[Scraper] Reloading page...'
-        );
-
-        await page.reload({
-            waitUntil: 'domcontentloaded',
-            timeout: 30000,
-        });
-
-        await page.waitForTimeout(3000);
-
-        console.log(
-            '[Scraper] Page reloaded successfully'
-        );
-
-        /*
-         * Cookie popup should now appear.
-         */
-        const accepted =
-            await handleCookieConsent(page);
-
-        if (!accepted) {
-            console.log(
-                '[Scraper] Cookie popup still not found after reload'
-            );
-        }
-
-        return;
-    }
-
-    console.log(
-        '[Scraper] No blocking overlay detected - continuing'
-    );
-}
-
-/**
- * Playwright scraper.
- */
 async function scrapeWithPlaywright(
     productId,
     layout,
@@ -421,22 +238,31 @@ async function scrapeWithPlaywright(
     let browser = null;
 
     try {
-        const { chromium } = require('playwright');
+        const {
+            chromium,
+        } = require('playwright');
 
-        browser = await chromium.launch({
-            headless: !headed,
-            slowMo: headed ? 50 : 0,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-            ],
-        });
+        browser =
+            await chromium.launch({
+                headless: !headed,
+
+                slowMo:
+                    headed ? 50 : 0,
+
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                ],
+            });
 
         const context =
             await browser.newContext({
                 userAgent:
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
+                    'AppleWebKit/537.36 ' +
+                    '(KHTML, like Gecko) ' +
+                    'Chrome/120.0.0.0 Safari/537.36',
 
                 viewport: {
                     width: 1366,
@@ -444,46 +270,18 @@ async function scrapeWithPlaywright(
                 },
             });
 
-        const page = await context.newPage();
+        const page =
+            await context.newPage();
 
         page.setDefaultTimeout(15000);
 
-        const productUrl =
-            `${MOCK_STORE_BASE}/product/${productId}`;
-
         console.log(
-            `[Scraper] Opening: ${productUrl}`
+            `[Scraper] Opening: ${MOCK_STORE_BASE}/product/${productId}`
         );
 
-        /*
-         * --------------------------------------------------
-         * 1. OPEN PAGE
-         * --------------------------------------------------
-         */
-
-        await page.goto(productUrl, {
-            waitUntil: 'domcontentloaded',
-            timeout: 30000,
-        });
-
-        /*
-         * IMPORTANT:
-         *
-         * We DO NOT remove the cookie overlay here.
-         *
-         * The real site needs time to create the cookie
-         * popup and its JavaScript state.
-         */
-        await initializePage(
-            page,
-            productId
-        );
-
-        /*
-         * --------------------------------------------------
-         * 2. GET DYNAMIC CLASS NAMES
-         * --------------------------------------------------
-         */
+        /* =====================================================
+           DYNAMIC CLASS NAMES
+        ===================================================== */
 
         const priceWrapClass =
             layout?.classes?.priceWrap ||
@@ -517,35 +315,306 @@ async function scrapeWithPlaywright(
             `[Scraper] Price class: ${priceValueClass}`
         );
 
-        /*
-         * --------------------------------------------------
-         * 3. FIND PRICE WRAPPER
-         * --------------------------------------------------
-         */
+        /* =====================================================
+           OPEN PAGE
+        ===================================================== */
+
+        await page.goto(
+            `${MOCK_STORE_BASE}/product/${productId}`,
+            {
+                waitUntil: 'domcontentloaded',
+                timeout: 30000,
+            }
+        );
+
+        await page.waitForTimeout(1500);
+
+        /* =====================================================
+           COOKIE HANDLING
+           
+           IMPORTANT:
+           We DO NOT remove the cookie overlay during
+           initialization.
+        ===================================================== */
+
+        async function acceptCookieIfPresent() {
+            try {
+                console.log(
+                    '[Scraper] Checking for cookie consent...'
+                );
+
+                const acceptButton =
+                    page.getByRole(
+                        'button',
+                        {
+                            name: /^accept$/i,
+                        }
+                    ).first();
+
+                if (
+                    await acceptButton.count()
+                ) {
+                    const visible =
+                        await acceptButton.isVisible()
+                            .catch(() => false);
+
+                    if (visible) {
+                        console.log(
+                            '[Scraper] Cookie ACCEPT button found'
+                        );
+
+                        await acceptButton.click({
+                            force: true,
+                            timeout: 5000,
+                        });
+
+                        console.log(
+                            '[Scraper] Cookie accepted'
+                        );
+
+                        await page.waitForTimeout(
+                            1000
+                        );
+
+                        return true;
+                    }
+                }
+
+                console.log(
+                    '[Scraper] No cookie consent button found - continuing'
+                );
+
+                return false;
+            } catch (error) {
+                console.log(
+                    '[Scraper] Cookie check:',
+                    error.message
+                );
+
+                return false;
+            }
+        }
+
+        /* =====================================================
+           DETECT STUCK DIM OVERLAY
+        ===================================================== */
+
+        async function isPageBlocked() {
+            try {
+                return await page.evaluate(() => {
+                    const width =
+                        window.innerWidth;
+
+                    const height =
+                        window.innerHeight;
+
+                    const points = [
+                        [
+                            width * 0.05,
+                            height * 0.05,
+                        ],
+                        [
+                            width * 0.5,
+                            height * 0.1,
+                        ],
+                        [
+                            width * 0.5,
+                            height * 0.5,
+                        ],
+                        [
+                            width * 0.9,
+                            height * 0.5,
+                        ],
+                    ];
+
+                    let blockedPoints = 0;
+
+                    for (
+                        const [x, y] of points
+                    ) {
+                        const elements =
+                            document.elementsFromPoint(
+                                x,
+                                y
+                            );
+
+                        const blocker =
+                            elements.find(
+                                (el) => {
+                                    if (
+                                        !el ||
+                                        el ===
+                                        document.body ||
+                                        el ===
+                                        document.documentElement
+                                    ) {
+                                        return false;
+                                    }
+
+                                    const style =
+                                        window.getComputedStyle(
+                                            el
+                                        );
+
+                                    const rect =
+                                        el.getBoundingClientRect();
+
+                                    const zIndex =
+                                        parseInt(
+                                            style.zIndex
+                                        );
+
+                                    const fixedOrAbsolute =
+                                        style.position ===
+                                        'fixed' ||
+                                        style.position ===
+                                        'absolute';
+
+                                    const coversLargeArea =
+                                        rect.width >
+                                        width * 0.65 &&
+                                        rect.height >
+                                        height * 0.65;
+
+                                    return (
+                                        fixedOrAbsolute &&
+                                        coversLargeArea &&
+                                        (
+                                            zIndex >=
+                                            100 ||
+                                            style.opacity !==
+                                            '1'
+                                        )
+                                    );
+                                }
+                            );
+
+                        if (blocker) {
+                            blockedPoints++;
+                        }
+                    }
+
+                    return (
+                        blockedPoints >= 2
+                    );
+                });
+            } catch {
+                return false;
+            }
+        }
+
+        /* =====================================================
+           PAGE RECOVERY
+           
+           The site occasionally loads with a permanent
+           dim layer. One reload sometimes isn't enough.
+           
+           We therefore allow up to 3 reloads.
+        ===================================================== */
+
+        async function recoverPageIfBlocked() {
+            const maxReloads = 3;
+
+            for (
+                let reloadAttempt = 0;
+                reloadAttempt <= maxReloads;
+                reloadAttempt++
+            ) {
+                await acceptCookieIfPresent();
+
+                const blocked =
+                    await isPageBlocked();
+
+                if (!blocked) {
+                    console.log(
+                        '[Scraper] Page is interactive'
+                    );
+
+                    return true;
+                }
+
+                if (
+                    reloadAttempt ===
+                    maxReloads
+                ) {
+                    console.log(
+                        '[Scraper] Page still blocked after 3 reloads'
+                    );
+
+                    return false;
+                }
+
+                console.log(
+                    `[Scraper] Page stuck/dim - reload ${reloadAttempt + 1}/3`
+                );
+
+                await page.reload({
+                    waitUntil:
+                        'domcontentloaded',
+                    timeout: 30000,
+                });
+
+                await page.waitForTimeout(
+                    1500
+                );
+            }
+
+            return false;
+        }
+
+        /* =====================================================
+           INITIAL PAGE RECOVERY
+        ===================================================== */
+
+        const pageRecovered =
+            await recoverPageIfBlocked();
+
+        if (!pageRecovered) {
+            throw new Error(
+                'Page remained blocked after 3 reloads'
+            );
+        }
+
+        /* =====================================================
+           WAIT FOR PRICE WRAPPER
+        ===================================================== */
 
         const priceWrap =
-            page
-                .locator(`.${priceWrapClass}`)
-                .first();
+            page.locator(
+                `.${priceWrapClass}`
+            ).first();
 
         await priceWrap.waitFor({
             state: 'visible',
-            timeout: 20000,
+            timeout: 25000,
         });
-
-        console.log(
-            '[Scraper] Price wrapper found'
-        );
-
-        /*
-         * --------------------------------------------------
-         * 4. HOVER PRICE AREA
-         * --------------------------------------------------
-         */
 
         await priceWrap.scrollIntoViewIfNeeded();
 
         await page.waitForTimeout(500);
+
+        /* =====================================================
+           COOKIE CHECK AGAIN
+        ===================================================== */
+
+        await acceptCookieIfPresent();
+
+        /* =====================================================
+           CHECK PAGE AGAIN BEFORE HOVER
+        ===================================================== */
+
+        const recoveredBeforeHover =
+            await recoverPageIfBlocked();
+
+        if (!recoveredBeforeHover) {
+            throw new Error(
+                'Page became blocked before price hover'
+            );
+        }
+
+        /* =====================================================
+           REAL MOUSE HOVER
+        ===================================================== */
 
         const bounds =
             await priceWrap.boundingBox();
@@ -557,53 +626,79 @@ async function scrapeWithPlaywright(
         }
 
         console.log(
+            '[Scraper] Price wrapper bounds:',
+            bounds
+        );
+
+        console.log(
             '[Scraper] Hovering over price area...'
         );
 
-        /*
-         * Start outside and move into the box.
-         * This reproduces real mouse movement better
-         * than simply calling locator.hover().
-         */
-        await page.mouse.move(
-            bounds.x - 20,
-            bounds.y +
-            bounds.height / 2
-        );
+        const startX =
+            bounds.x + 10;
 
-        await page.waitForTimeout(200);
+        const centerY =
+            bounds.y +
+            bounds.height / 2;
 
         await page.mouse.move(
-            bounds.x +
-            bounds.width / 2,
-            bounds.y +
-            bounds.height / 2,
-            {
-                steps: 10,
-            }
+            startX,
+            centerY
         );
+
+        for (
+            let step = 1;
+            step <= 20;
+            step++
+        ) {
+            const x =
+                bounds.x +
+                10 +
+                ((bounds.width - 20) *
+                    step) /
+                20;
+
+            const y =
+                bounds.y +
+                bounds.height *
+                (
+                    0.30 +
+                    ((step % 4) *
+                        0.12)
+                );
+
+            await page.mouse.move(
+                x,
+                y,
+                {
+                    steps: 3,
+                }
+            );
+
+            await page.waitForTimeout(
+                100
+            );
+        }
 
         console.log(
             '[Scraper] Price area hovered successfully'
         );
 
-        /*
-         * Give the site's hover timer enough time.
-         */
-        await page.waitForTimeout(2000);
+        await page.waitForTimeout(
+            1500
+        );
 
-        /*
-         * --------------------------------------------------
-         * 5. FIND REVEAL PRICE BUTTON
-         * --------------------------------------------------
-         */
+        /* =====================================================
+           FIND REVEAL BUTTON
+        ===================================================== */
 
         const revealButton =
-            page
-                .getByRole('button', {
+            page.getByRole(
+                'button',
+                {
                     name: /reveal price/i,
-                })
-                .first();
+                }
+            ).first();
 
         await revealButton.waitFor({
             state: 'visible',
@@ -614,99 +709,149 @@ async function scrapeWithPlaywright(
             '[Scraper] Reveal Price button found'
         );
 
-        /*
-         * --------------------------------------------------
-         * 6. WAIT FOR BUTTON TO BECOME ENABLED
-         * --------------------------------------------------
-         *
-         * This is the important part.
-         *
-         * Earlier code waited and then failed.
-         * Now we continuously check the actual
-         * disabled state.
-         */
+        /* =====================================================
+           WAIT FOR BUTTON TO BECOME ENABLED
+        ===================================================== */
 
-        let enabled = false;
+        let buttonEnabled = false;
 
         for (
-            let check = 1;
-            check <= 20;
-            check++
+            let i = 1;
+            i <= 20;
+            i++
         ) {
-            enabled =
-                await revealButton.isEnabled();
+            await page.waitForTimeout(
+                500
+            );
 
-            if (enabled) {
-                console.log(
-                    `[Scraper] Reveal button enabled (${check}/20)`
-                );
+            await acceptCookieIfPresent();
 
+            const disabled =
+                await revealButton.isDisabled()
+                    .catch(() => true);
+
+            console.log(
+                `[Scraper] Reveal button ${disabled
+                    ? 'still disabled'
+                    : 'enabled'
+                } (${i}/20)`
+            );
+
+            if (!disabled) {
+                buttonEnabled = true;
                 break;
             }
 
-            console.log(
-                `[Scraper] Reveal button still disabled (${check}/20)`
-            );
-
             /*
-             * Re-hover the price area periodically.
+             * Continue real mouse movement over
+             * the price wrapper while waiting.
              */
-            if (check % 4 === 0) {
-                const currentBounds =
-                    await priceWrap.boundingBox();
+            const currentBounds =
+                await priceWrap.boundingBox();
 
-                if (currentBounds) {
-                    await page.mouse.move(
-                        currentBounds.x +
-                        currentBounds.width / 2,
-                        currentBounds.y +
-                        currentBounds.height / 2,
-                        {
-                            steps: 5,
-                        }
-                    );
-                }
+            if (currentBounds) {
+                await page.mouse.move(
+                    currentBounds.x +
+                    currentBounds.width / 2,
+                    currentBounds.y +
+                    currentBounds.height / 2,
+                    {
+                        steps: 5,
+                    }
+                );
             }
-
-            await page.waitForTimeout(500);
         }
 
-        if (!enabled) {
+        console.log(
+            '[Scraper] Reveal button enabled:',
+            buttonEnabled
+        );
+
+        if (!buttonEnabled) {
+            /*
+             * The page may have entered the stuck
+             * dim state again.
+             */
+            const blockedAgain =
+                await isPageBlocked();
+
+            if (blockedAgain) {
+                throw new Error(
+                    'Page became blocked while waiting for Reveal Price'
+                );
+            }
+
             throw new Error(
                 'Reveal Price button remained disabled after hover'
             );
         }
 
-        /*
-         * --------------------------------------------------
-         * 7. CLICK REVEAL PRICE
-         * --------------------------------------------------
-         */
+        /* =====================================================
+           MOVE TO BUTTON
+        ===================================================== */
+
+        const buttonBounds =
+            await revealButton.boundingBox();
+
+        if (buttonBounds) {
+            await page.mouse.move(
+                buttonBounds.x +
+                buttonBounds.width / 2,
+                buttonBounds.y +
+                buttonBounds.height / 2,
+                {
+                    steps: 5,
+                }
+            );
+
+            await page.waitForTimeout(
+                300
+            );
+        }
+
+        /* =====================================================
+           CAPTURE PRICE API RESPONSE
+           
+           The browser showed a /price network request
+           after the reveal action, so listen for it.
+        ===================================================== */
+
+        let priceApiData = null;
+
+        const priceResponsePromise =
+            page
+                .waitForResponse(
+                    async (response) => {
+                        try {
+                            const url =
+                                response.url();
+
+                            return (
+                                response.ok() &&
+                                /\/price(?:\/|$|\?)/i.test(
+                                    url
+                                )
+                            );
+                        } catch {
+                            return false;
+                        }
+                    },
+                    {
+                        timeout: 10000,
+                    }
+                )
+                .catch(() => null);
+
+        /* =====================================================
+           CLICK REVEAL
+        ===================================================== */
 
         console.log(
             '[Scraper] Clicking Reveal Price...'
         );
 
-        /*
-         * Listen for the actual price API request.
-         *
-         * The site was observed making:
-         * /challenge
-         * /session
-         * /price
-         */
-        const priceResponsePromise =
-            page.waitForResponse(
-                response =>
-                    response
-                        .url()
-                        .includes('/price'),
-                {
-                    timeout: 15000,
-                }
-            ).catch(() => null);
-
         await revealButton.click({
+            force: true,
             timeout: 5000,
         });
 
@@ -714,85 +859,42 @@ async function scrapeWithPlaywright(
             '[Scraper] Reveal Price clicked'
         );
 
-        /*
-         * Wait for the price request if it occurs.
-         */
+        /* =====================================================
+           READ PRICE API
+        ===================================================== */
+
         const priceResponse =
             await priceResponsePromise;
 
         if (priceResponse) {
-            console.log(
-                '[Scraper] Price API response:',
-                priceResponse.status()
-            );
+            try {
+                priceApiData =
+                    await priceResponse.json();
+
+                console.log(
+                    '[Scraper] Price API response:',
+                    JSON.stringify(
+                        priceApiData
+                    )
+                );
+            } catch {
+                console.log(
+                    '[Scraper] Price API response was not JSON'
+                );
+            }
         }
 
-        /*
-         * --------------------------------------------------
-         * 8. WAIT FOR RENDERED PRICE
-         * --------------------------------------------------
-         */
+        /* =====================================================
+           WAIT FOR DOM PRICE
+        ===================================================== */
 
-        await page.waitForTimeout(1500);
+        await page.waitForTimeout(
+            1500
+        );
 
-        try {
-            await page.waitForFunction(
-                ({
-                    priceValueClass,
-                    saleClass,
-                }) => {
-                    const selectors = [
-                        `.${priceValueClass}`,
-                        `.${saleClass}`,
-                        'output',
-                    ];
-
-                    return selectors.some(
-                        selector =>
-                            [...document.querySelectorAll(
-                                selector
-                            )].some(element => {
-                                const text =
-                                    element.textContent
-                                        ?.trim();
-
-                                if (!text) {
-                                    return false;
-                                }
-
-                                const style =
-                                    window.getComputedStyle(
-                                        element
-                                    );
-
-                                return (
-                                    style.display !==
-                                    'none' &&
-                                    style.visibility !==
-                                    'hidden'
-                                );
-                            })
-                    );
-                },
-                {
-                    priceValueClass,
-                    saleClass,
-                },
-                {
-                    timeout: 10000,
-                }
-            );
-        } catch {
-            console.log(
-                '[Scraper] Price wait timed out - extracting anyway'
-            );
-        }
-
-        /*
-         * --------------------------------------------------
-         * 9. EXTRACT PRICE
-         * --------------------------------------------------
-         */
+        /* =====================================================
+           EXTRACT DOM PRICE
+        ===================================================== */
 
         const priceData =
             await page.evaluate(
@@ -803,12 +905,8 @@ async function scrapeWithPlaywright(
                     mrpClass,
                     priceTag,
                 }) => {
-                    let price = null;
-                    let originalPrice = null;
-                    let stock = null;
-
                     const cleanText =
-                        value =>
+                        (value) =>
                             (value || '')
                                 .replace(
                                     /[\u200B-\u200D\u2060\u00A0]/g,
@@ -821,44 +919,43 @@ async function scrapeWithPlaywright(
                                 .trim();
 
                     const parsePrice =
-                        text => {
-                            if (!text) {
+                        (text) => {
+                            if (!text)
                                 return null;
-                            }
 
                             const cleaned =
-                                cleanText(text);
+                                cleanText(
+                                    text
+                                );
 
                             const match =
                                 cleaned.match(
                                     /(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d{1,2})?)/
                                 );
 
-                            if (!match) {
+                            if (!match)
                                 return null;
-                            }
 
                             const value =
                                 Number(
-                                    match[1]
-                                        .replace(
-                                            /,/g,
-                                            ''
-                                        )
+                                    match[1].replace(
+                                        /,/g,
+                                        ''
+                                    )
                                 );
 
                             return Number.isFinite(
                                 value
-                            ) && value > 0
+                            ) &&
+                                value > 0
                                 ? value
                                 : null;
                         };
 
                     const isVisible =
-                        element => {
-                            if (!element) {
+                        (element) => {
+                            if (!element)
                                 return false;
-                            }
 
                             const style =
                                 window.getComputedStyle(
@@ -873,18 +970,13 @@ async function scrapeWithPlaywright(
                                 'none' &&
                                 style.visibility !==
                                 'hidden' &&
-                                parseFloat(
-                                    style.opacity ||
-                                    '1'
-                                ) > 0 &&
+                                style.opacity !==
+                                '0' &&
                                 rect.width > 0 &&
                                 rect.height > 0
                             );
                         };
 
-                    /*
-                     * Current price candidates.
-                     */
                     const selectors = [
                         `.${priceValueClass}`,
                         `.${saleClass}`,
@@ -904,33 +996,34 @@ async function scrapeWithPlaywright(
                             .querySelectorAll(
                                 selector
                             )
-                            .forEach(element => {
-                                if (
-                                    isVisible(
-                                        element
-                                    ) &&
-                                    !candidates.includes(
-                                        element
-                                    )
-                                ) {
-                                    candidates.push(
-                                        element
-                                    );
+                            .forEach(
+                                (element) => {
+                                    if (
+                                        isVisible(
+                                            element
+                                        ) &&
+                                        !candidates.includes(
+                                            element
+                                        )
+                                    ) {
+                                        candidates.push(
+                                            element
+                                        );
+                                    }
                                 }
-                            });
+                            );
                     }
 
-                    const validCandidates =
+                    const valid =
                         candidates.filter(
-                            element => {
+                            (element) => {
                                 const text =
                                     cleanText(
                                         element.textContent
                                     );
 
-                                if (!text) {
+                                if (!text)
                                     return false;
-                                }
 
                                 const className =
                                     typeof element.className ===
@@ -958,16 +1051,6 @@ async function scrapeWithPlaywright(
                                     return false;
                                 }
 
-                                if (
-                                    element.style
-                                        ?.textDecorationLine
-                                        ?.includes(
-                                            'line-through'
-                                        )
-                                ) {
-                                    return false;
-                                }
-
                                 return (
                                     parsePrice(
                                         text
@@ -976,10 +1059,7 @@ async function scrapeWithPlaywright(
                             }
                         );
 
-                    /*
-                     * Prefer the largest visible price.
-                     */
-                    validCandidates.sort(
+                    valid.sort(
                         (a, b) => {
                             const aSize =
                                 parseFloat(
@@ -1001,19 +1081,21 @@ async function scrapeWithPlaywright(
                         }
                     );
 
+                    let price = null;
+
                     if (
-                        validCandidates.length
+                        valid.length
                     ) {
                         price =
                             parsePrice(
-                                validCandidates[0]
+                                valid[0]
                                     .textContent
                             );
                     }
 
-                    /*
-                     * MRP.
-                     */
+                    let originalPrice =
+                        null;
+
                     const mrpElement =
                         document.querySelector(
                             `.${mrpClass}`
@@ -1021,7 +1103,9 @@ async function scrapeWithPlaywright(
 
                     if (
                         mrpElement &&
-                        isVisible(mrpElement)
+                        isVisible(
+                            mrpElement
+                        )
                     ) {
                         originalPrice =
                             parsePrice(
@@ -1029,9 +1113,8 @@ async function scrapeWithPlaywright(
                             );
                     }
 
-                    /*
-                     * Stock.
-                     */
+                    let stock = null;
+
                     const stockElement =
                         document.querySelector(
                             `.${stockClass}`
@@ -1039,26 +1122,28 @@ async function scrapeWithPlaywright(
 
                     if (
                         stockElement &&
-                        isVisible(stockElement)
+                        isVisible(
+                            stockElement
+                        )
                     ) {
-                        const stockText =
+                        const text =
                             cleanText(
                                 stockElement.textContent
                             );
 
-                        const stockMatch =
-                            stockText.match(
+                        const number =
+                            text.match(
                                 /\d+/
                             );
 
-                        if (stockMatch) {
+                        if (number) {
                             stock =
                                 Number(
-                                    stockMatch[0]
+                                    number[0]
                                 );
                         } else if (
                             /out of stock|unavailable/i.test(
-                                stockText
+                                text
                             )
                         ) {
                             stock = 0;
@@ -1069,11 +1154,17 @@ async function scrapeWithPlaywright(
                         price,
                         originalPrice,
                         stock,
+
                         candidates:
-                            validCandidates
-                                .slice(0, 10)
+                            valid
+                                .slice(
+                                    0,
+                                    10
+                                )
                                 .map(
-                                    element => ({
+                                    (
+                                        element
+                                    ) => ({
                                         text:
                                             cleanText(
                                                 element.textContent
@@ -1096,37 +1187,114 @@ async function scrapeWithPlaywright(
                 }
             );
 
+        /* =====================================================
+           LOG RESULTS
+        ===================================================== */
+
         console.log(
-            '[Scraper] PRICE:',
+            '[Scraper] DOM PRICE:',
             priceData.price
         );
 
         console.log(
-            '[Scraper] MRP:',
+            '[Scraper] DOM MRP:',
             priceData.originalPrice
         );
 
         console.log(
-            '[Scraper] STOCK:',
+            '[Scraper] DOM STOCK:',
             priceData.stock
         );
 
         console.log(
-            '[Scraper] CANDIDATES:',
+            '[Scraper] PRICE API:',
+            JSON.stringify(
+                priceApiData
+            )
+        );
+
+        console.log(
+            '[Scraper] PRICE CANDIDATES:',
             JSON.stringify(
                 priceData.candidates
             )
         );
 
-        /*
-         * --------------------------------------------------
-         * 10. VALIDATE
-         * --------------------------------------------------
-         */
+        /* =====================================================
+           API PRICE FALLBACK
+        ===================================================== */
+
+        let apiPrice = null;
+
+        if (priceApiData) {
+            const possibleValues = [
+                priceApiData.price,
+                priceApiData.currentPrice,
+                priceApiData.salePrice,
+                priceApiData.data?.price,
+                priceApiData.data?.currentPrice,
+                priceApiData.data?.salePrice,
+            ];
+
+            for (
+                const value of possibleValues
+            ) {
+                if (
+                    typeof value ===
+                    'number' &&
+                    value > 0
+                ) {
+                    apiPrice = value;
+                    break;
+                }
+
+                if (
+                    typeof value ===
+                    'string'
+                ) {
+                    const match =
+                        value.match(
+                            /[\d,]+(?:\.\d{1,2})?/
+                        );
+
+                    if (match) {
+                        const parsed =
+                            Number(
+                                match[0].replace(
+                                    /,/g,
+                                    ''
+                                )
+                            );
+
+                        if (
+                            parsed > 0
+                        ) {
+                            apiPrice =
+                                parsed;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        const finalPrice =
+            apiPrice ||
+            priceData.price;
+
+        console.log(
+            '[Scraper] FINAL PRICE:',
+            finalPrice
+        );
+
+        /* =====================================================
+           VALIDATION
+        ===================================================== */
 
         if (
-            priceData.price === null ||
-            priceData.price <= 0
+            finalPrice === null ||
+            finalPrice === undefined ||
+            finalPrice <= 0
         ) {
             throw new Error(
                 'Price extraction returned null'
@@ -1134,35 +1302,36 @@ async function scrapeWithPlaywright(
         }
 
         return {
-            price: priceData.price,
+            price: finalPrice,
+
             originalPrice:
                 priceData.originalPrice,
-            stock: priceData.stock,
-        };
 
+            stock:
+                priceData.stock,
+        };
     } catch (error) {
         console.error(
-            '[Scraper] Playwright error:',
+            '[Scraper] Error:',
             error.message
         );
 
         throw error;
-
     } finally {
         if (browser) {
-            try {
-                await browser.close();
-            } catch {
-                // Ignore browser close errors.
-            }
+            await browser.close();
         }
     }
 }
 
+/* =========================================================
+   EXPORTS
+========================================================= */
+
 module.exports = {
-    fetchLayout,
+    scrapeProductPrice,
     searchCatalog,
     deepSearchCatalog,
     fetchProductDetails,
-    scrapeProductPrice,
+    fetchLayout,
 };
