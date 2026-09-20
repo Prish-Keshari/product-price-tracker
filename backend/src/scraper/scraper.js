@@ -287,6 +287,37 @@ async function scrapeWithPlaywright(
         });
 
         const page = await context.newPage();
+        page.on("request", request => {
+            const url = request.url();
+
+            if (
+                url.includes("/api/") ||
+                url.includes("price") ||
+                url.includes("product")
+            ) {
+                console.log(
+                    "[NETWORK REQUEST]",
+                    request.method(),
+                    url
+                );
+            }
+        });
+
+        page.on("response", response => {
+            const url = response.url();
+
+            if (
+                url.includes("/api/") ||
+                url.includes("price") ||
+                url.includes("product")
+            ) {
+                console.log(
+                    "[NETWORK RESPONSE]",
+                    response.status(),
+                    url
+                );
+            }
+        });
 
         page.setDefaultTimeout(15000);
 
@@ -390,6 +421,64 @@ async function scrapeWithPlaywright(
 
             console.log(
                 "[Scraper] Price area hovered successfully"
+            );
+            console.log(
+                "[DEBUG] Price wrapper HTML before events:"
+            );
+
+            console.log(
+                await priceWrap.evaluate(el => el.outerHTML)
+            );
+
+            console.log(
+                "[DEBUG] Dispatching mouse events..."
+            );
+
+            await priceWrap.evaluate((el) => {
+                const rect = el.getBoundingClientRect();
+
+                const events = [
+                    "mouseenter",
+                    "mouseover",
+                    "mousemove",
+                    "pointerenter",
+                    "pointerover",
+                    "pointermove"
+                ];
+
+                for (const eventName of events) {
+                    el.dispatchEvent(
+                        new MouseEvent(eventName, {
+                            bubbles: true,
+                            cancelable: true,
+                            view: window,
+                            clientX:
+                                rect.left + rect.width / 2,
+                            clientY:
+                                rect.top + rect.height / 2
+                        })
+                    );
+                }
+            });
+
+            await page.waitForTimeout(3000);
+
+            console.log(
+                "[DEBUG] Price wrapper HTML after events:"
+            );
+
+            console.log(
+                await priceWrap.evaluate(el => el.outerHTML)
+            );
+
+            console.log(
+                "[DEBUG] Reveal button HTML:"
+            );
+
+            console.log(
+                await revealButton.evaluate(
+                    el => el.outerHTML
+                )
             );
         } catch (error) {
             console.log(
