@@ -12,19 +12,13 @@ const MOCK_STORE_BASE =
 async function fetchLayout() {
     const res = await axios.get(
         `${MOCK_STORE_BASE}/api/layout`,
-        {
-            timeout: 15000,
-        }
+        { timeout: 15000 }
     );
 
     return res.data;
 }
 
-async function searchCatalog(
-    query,
-    page = 1,
-    pageSize = 20
-) {
+async function searchCatalog(query, page = 1, pageSize = 20) {
     const res = await axios.get(
         `${MOCK_STORE_BASE}/api/catalog`,
         {
@@ -41,23 +35,12 @@ async function searchCatalog(
     if (query && query.trim()) {
         const q = query.toLowerCase().trim();
 
-        data.items = data.items.filter((item) => {
+        data.items = (data.items || []).filter((item) => {
             return (
-                String(item.name || "")
-                    .toLowerCase()
-                    .includes(q) ||
-
-                String(item.brand || "")
-                    .toLowerCase()
-                    .includes(q) ||
-
-                String(item.category || "")
-                    .toLowerCase()
-                    .includes(q) ||
-
-                String(item.sku || "")
-                    .toLowerCase()
-                    .includes(q)
+                String(item.name || "").toLowerCase().includes(q) ||
+                String(item.brand || "").toLowerCase().includes(q) ||
+                String(item.category || "").toLowerCase().includes(q) ||
+                String(item.sku || "").toLowerCase().includes(q)
             );
         });
     }
@@ -65,25 +48,15 @@ async function searchCatalog(
     return data;
 }
 
-async function deepSearchCatalog(
-    query,
-    maxPages = 10
-) {
+async function deepSearchCatalog(query, maxPages = 10) {
     const results = [];
-
-    const q = String(query || "")
-        .toLowerCase()
-        .trim();
+    const q = String(query || "").toLowerCase().trim();
 
     if (!q) {
         return results;
     }
 
-    for (
-        let page = 1;
-        page <= maxPages;
-        page++
-    ) {
+    for (let page = 1; page <= maxPages; page++) {
         try {
             const res = await axios.get(
                 `${MOCK_STORE_BASE}/api/catalog`,
@@ -97,32 +70,18 @@ async function deepSearchCatalog(
             );
 
             const data = res.data;
-
             const items = Array.isArray(data.items)
                 ? data.items
                 : [];
 
-            const matching = items.filter(
-                (item) => {
-                    return (
-                        String(item.name || "")
-                            .toLowerCase()
-                            .includes(q) ||
-
-                        String(item.brand || "")
-                            .toLowerCase()
-                            .includes(q) ||
-
-                        String(item.category || "")
-                            .toLowerCase()
-                            .includes(q) ||
-
-                        String(item.sku || "")
-                            .toLowerCase()
-                            .includes(q)
-                    );
-                }
-            );
+            const matching = items.filter((item) => {
+                return (
+                    String(item.name || "").toLowerCase().includes(q) ||
+                    String(item.brand || "").toLowerCase().includes(q) ||
+                    String(item.category || "").toLowerCase().includes(q) ||
+                    String(item.sku || "").toLowerCase().includes(q)
+                );
+            });
 
             results.push(...matching);
 
@@ -138,7 +97,6 @@ async function deepSearchCatalog(
                 `[Catalog] Page ${page} failed:`,
                 error.message
             );
-
             break;
         }
     }
@@ -149,20 +107,18 @@ async function deepSearchCatalog(
 async function fetchProductDetails(productId) {
     const res = await axios.get(
         `${MOCK_STORE_BASE}/api/product/${productId}`,
-        {
-            timeout: 15000,
-        }
+        { timeout: 15000 }
     );
 
     return res.data;
 }
 
 /* =========================================================
-   ACCEPT COOKIES
+   COOKIE CONSENT
 ========================================================= */
 
 async function acceptCookies(page) {
-    const cookieButtonPatterns = [
+    const patterns = [
         /accept all cookies/i,
         /accept all/i,
         /accept cookies/i,
@@ -174,32 +130,19 @@ async function acceptCookies(page) {
         /got it/i,
     ];
 
-    console.log(
-        "[Scraper] Checking for cookie consent..."
-    );
+    console.log("[Scraper] Checking for cookie consent...");
 
-    for (
-        const pattern of cookieButtonPatterns
-    ) {
+    for (const pattern of patterns) {
         try {
             const button = page
-                .getByRole("button", {
-                    name: pattern,
-                })
+                .getByRole("button", { name: pattern })
                 .first();
 
-            const count =
-                await button.count();
-
-            if (count === 0) {
+            if (await button.count() === 0) {
                 continue;
             }
 
-            const visible =
-                await button.isVisible()
-                    .catch(() => false);
-
-            if (!visible) {
+            if (!(await button.isVisible().catch(() => false))) {
                 continue;
             }
 
@@ -211,25 +154,17 @@ async function acceptCookies(page) {
                 timeout: 5000,
             });
 
+            await page.waitForTimeout(1000);
+
             console.log(
                 "[Scraper] Cookies accepted successfully"
             );
 
-            await page.waitForTimeout(1000);
-
             return true;
-        } catch (error) {
-            console.log(
-                `[Scraper] Cookie button ${pattern} failed:`,
-                error.message
-            );
+        } catch {
+            // Try next selector
         }
     }
-
-    /*
-       Some websites use links instead of buttons.
-       Try common text selectors as a fallback.
-    */
 
     const fallbackSelectors = [
         'text="Accept All"',
@@ -241,9 +176,7 @@ async function acceptCookies(page) {
         'text="Got it"',
     ];
 
-    for (
-        const selector of fallbackSelectors
-    ) {
+    for (const selector of fallbackSelectors) {
         try {
             const element =
                 page.locator(selector).first();
@@ -260,16 +193,16 @@ async function acceptCookies(page) {
                     timeout: 5000,
                 });
 
+                await page.waitForTimeout(1000);
+
                 console.log(
                     "[Scraper] Cookies accepted successfully"
                 );
 
-                await page.waitForTimeout(1000);
-
                 return true;
             }
         } catch {
-            // Try next selector
+            // Continue
         }
     }
 
@@ -290,10 +223,7 @@ function parsePrice(text) {
     }
 
     const cleaned = String(text)
-        .replace(
-            /[\u200B-\u200D\u2060\u00A0]/g,
-            " "
-        )
+        .replace(/[\u200B-\u200D\u2060\u00A0]/g, " ")
         .replace(/\s+/g, " ")
         .trim();
 
@@ -309,10 +239,7 @@ function parsePrice(text) {
         match[1].replace(/,/g, "")
     );
 
-    if (
-        !Number.isFinite(value) ||
-        value <= 0
-    ) {
+    if (!Number.isFinite(value) || value <= 0) {
         return null;
     }
 
@@ -335,13 +262,8 @@ async function scrapeWithPlaywright(
             `[Scraper] Starting product: ${productId}`
         );
 
-        /* -----------------------------------------
-           LAUNCH BROWSER
-        ----------------------------------------- */
-
         browser = await chromium.launch({
             headless: !headed,
-
             slowMo: headed ? 50 : 0,
 
             args: [
@@ -352,21 +274,19 @@ async function scrapeWithPlaywright(
             ],
         });
 
-        const context =
-            await browser.newContext({
-                viewport: {
-                    width: 1366,
-                    height: 768,
-                },
+        const context = await browser.newContext({
+            viewport: {
+                width: 1366,
+                height: 768,
+            },
 
-                userAgent:
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-                    "AppleWebKit/537.36 (KHTML, like Gecko) " +
-                    "Chrome/120.0.0.0 Safari/537.36",
-            });
+            userAgent:
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+                "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/120.0.0.0 Safari/537.36",
+        });
 
-        const page =
-            await context.newPage();
+        const page = await context.newPage();
 
         page.setDefaultTimeout(15000);
 
@@ -381,13 +301,10 @@ async function scrapeWithPlaywright(
             `[Scraper] Opening: ${productUrl}`
         );
 
-        await page.goto(
-            productUrl,
-            {
-                waitUntil: "domcontentloaded",
-                timeout: 30000,
-            }
-        );
+        await page.goto(productUrl, {
+            waitUntil: "domcontentloaded",
+            timeout: 30000,
+        });
 
         await page.waitForTimeout(1500);
 
@@ -397,40 +314,29 @@ async function scrapeWithPlaywright(
 
         await acceptCookies(page);
 
-        /*
-           Give the website time to update its
-           consent state after clicking.
-        */
-
         await page.waitForTimeout(1000);
 
         /* -----------------------------------------
-           GET DYNAMIC CLASSES
+           DYNAMIC CLASSES
         ----------------------------------------- */
 
         const priceWrapClass =
-            layout?.classes?.priceWrap ||
-            "pw-m4";
+            layout?.classes?.priceWrap || "pw-m4";
 
         const priceValueClass =
-            layout?.classes?.priceValue ||
-            "pv-m4";
+            layout?.classes?.priceValue || "pv-m4";
 
         const stockClass =
-            layout?.classes?.stock ||
-            "st-m4";
+            layout?.classes?.stock || "st-m4";
 
         const saleClass =
-            layout?.classes?.sale ||
-            "sl-m4";
+            layout?.classes?.sale || "sl-m4";
 
         const mrpClass =
-            layout?.classes?.mrp ||
-            "mr-m4";
+            layout?.classes?.mrp || "mr-m4";
 
         const priceTag =
-            layout?.priceTag ||
-            "output";
+            layout?.priceTag || "output";
 
         console.log(
             `[Scraper] Price wrapper: .${priceWrapClass}`
@@ -446,14 +352,10 @@ async function scrapeWithPlaywright(
 
         const priceWrap =
             page
-                .locator(
-                    `.${priceWrapClass}`
-                )
+                .locator(`.${priceWrapClass}`)
                 .first();
 
-        if (
-            await priceWrap.count() === 0
-        ) {
+        if (await priceWrap.count() === 0) {
             throw new Error(
                 `Price wrapper not found: .${priceWrapClass}`
             );
@@ -468,44 +370,57 @@ async function scrapeWithPlaywright(
            SCROLL TO PRICE
         ----------------------------------------- */
 
-        await priceWrap
-            .scrollIntoViewIfNeeded();
+        await priceWrap.scrollIntoViewIfNeeded();
 
         await page.waitForTimeout(500);
 
         /* -----------------------------------------
-           MOUSE MOVEMENT
+           HOVER PRICE AREA
         ----------------------------------------- */
 
-        const bounds =
-            await priceWrap.boundingBox();
+        console.log(
+            "[Scraper] Hovering over price area..."
+        );
 
-        if (bounds) {
-            const centerX =
-                bounds.x +
-                bounds.width / 2;
-
-            const centerY =
-                bounds.y +
-                bounds.height / 2;
+        try {
+            await priceWrap.hover({
+                force: true,
+                timeout: 10000,
+            });
 
             console.log(
-                "[Scraper] Moving mouse over price"
+                "[Scraper] Price area hovered successfully"
+            );
+        } catch (error) {
+            console.log(
+                "[Scraper] Price wrapper hover failed:",
+                error.message
             );
 
-            await page.mouse.move(
-                centerX,
-                centerY,
-                {
-                    steps: 10,
-                }
-            );
+            const bounds =
+                await priceWrap.boundingBox();
 
-            await page.waitForTimeout(1200);
+            if (bounds) {
+                await page.mouse.move(
+                    bounds.x + bounds.width / 2,
+                    bounds.y + bounds.height / 2,
+                    {
+                        steps: 25,
+                    }
+                );
+            }
         }
 
+        /*
+         * The website specifically requires hovering
+         * over the price area before enabling the
+         * Reveal Price button.
+         */
+
+        await page.waitForTimeout(1500);
+
         /* -----------------------------------------
-           REVEAL PRICE
+           FIND REVEAL BUTTON
         ----------------------------------------- */
 
         const revealButton =
@@ -515,84 +430,90 @@ async function scrapeWithPlaywright(
                 })
                 .first();
 
-        const revealCount =
-            await revealButton.count();
-
-        if (revealCount > 0) {
-            console.log(
-                "[Scraper] Reveal Price button found"
-            );
-
-            try {
-                await revealButton.waitFor({
-                    state: "visible",
-                    timeout: 7000,
-                });
-
-                await revealButton.click({
-                    force: true,
-                    timeout: 5000,
-                });
-                await page.waitForTimeout(2000);
-
-                console.log(
-                    "[DEBUG] URL after reveal:",
-                    page.url()
-                );
-
-                console.log(
-                    "[DEBUG] Page title:",
-                    await page.title()
-                );
-
-                console.log(
-                    "[DEBUG] Body text after reveal:"
-                );
-
-                console.log(
-                    (await page.locator("body").innerText())
-                        .slice(0, 10000)
-                );
-
-                console.log(
-                    "[DEBUG] HTML around price wrapper:"
-                );
-
-                console.log(
-                    await page
-                        .locator(`.${priceWrapClass}`)
-                        .first()
-                        .evaluate(el => el.outerHTML)
-                        .catch(() => "PRICE WRAPPER NOT FOUND")
-                );
-                console.log(
-                    "[DEBUG] All buttons after reveal:"
-                );
-
-                console.log(
-                    await page
-                        .locator("button")
-                        .allTextContents()
-                );
-                console.log(
-                    "[Scraper] Reveal Price clicked"
-                );
-
-                await page.waitForTimeout(1500);
-            } catch (error) {
-                console.log(
-                    "[Scraper] Reveal click failed:",
-                    error.message
-                );
-            }
-        } else {
-            console.log(
-                "[Scraper] No Reveal Price button"
+        if (await revealButton.count() === 0) {
+            throw new Error(
+                "Reveal Price button not found"
             );
         }
 
+        console.log(
+            "[Scraper] Reveal Price button found"
+        );
+
         /* -----------------------------------------
-           WAIT FOR PRICE
+           KEEP HOVERING UNTIL ENABLED
+        ----------------------------------------- */
+
+        let buttonEnabled = false;
+
+        for (let i = 0; i < 10; i++) {
+            buttonEnabled =
+                await revealButton
+                    .isEnabled()
+                    .catch(() => false);
+
+            if (buttonEnabled) {
+                break;
+            }
+
+            console.log(
+                `[Scraper] Reveal button still disabled ` +
+                `(${i + 1}/10)`
+            );
+
+            /*
+             * Hover again because the website's
+             * state is controlled by hover.
+             */
+
+            try {
+                await priceWrap.hover({
+                    force: true,
+                    timeout: 5000,
+                });
+            } catch {
+                const bounds =
+                    await priceWrap.boundingBox();
+
+                if (bounds) {
+                    await page.mouse.move(
+                        bounds.x + bounds.width / 2,
+                        bounds.y + bounds.height / 2,
+                        {
+                            steps: 20,
+                        }
+                    );
+                }
+            }
+
+            await page.waitForTimeout(500);
+        }
+
+        console.log(
+            "[Scraper] Reveal button enabled:",
+            buttonEnabled
+        );
+
+        /* -----------------------------------------
+           CLICK ONLY IF ENABLED
+        ----------------------------------------- */
+
+        if (!buttonEnabled) {
+            throw new Error(
+                "Reveal Price button remained disabled after hover"
+            );
+        }
+
+        await revealButton.click({
+            timeout: 5000,
+        });
+
+        console.log(
+            "[Scraper] Reveal Price clicked"
+        );
+
+        /* -----------------------------------------
+           WAIT FOR REVEAL
         ----------------------------------------- */
 
         try {
@@ -600,11 +521,14 @@ async function scrapeWithPlaywright(
                 ({
                     priceValueClass,
                     saleClass,
+                    priceWrapClass,
                 }) => {
                     const selectors = [
                         `.${priceValueClass}`,
                         `.${saleClass}`,
+                        `.${priceWrapClass} output`,
                         ".price-main",
+                        ".price-success",
                         "output",
                     ];
 
@@ -614,34 +538,43 @@ async function scrapeWithPlaywright(
                                 ...document.querySelectorAll(
                                     selector
                                 ),
-                            ].some(
-                                (element) => {
-                                    const style =
-                                        window.getComputedStyle(
-                                            element
-                                        );
+                            ].some((element) => {
+                                const text =
+                                    element.textContent?.trim();
 
-                                    return (
-                                        element.textContent?.trim() &&
-                                        style.display !==
-                                        "none" &&
-                                        style.visibility !==
-                                        "hidden" &&
-                                        style.opacity !==
-                                        "0"
+                                const style =
+                                    window.getComputedStyle(
+                                        element
                                     );
-                                }
-                            );
+
+                                const hidden =
+                                    element.classList.contains(
+                                        "price-idle"
+                                    );
+
+                                return (
+                                    text &&
+                                    !hidden &&
+                                    style.display !== "none" &&
+                                    style.visibility !== "hidden" &&
+                                    style.opacity !== "0"
+                                );
+                            });
                         }
                     );
                 },
                 {
                     priceValueClass,
                     saleClass,
+                    priceWrapClass,
                 },
                 {
-                    timeout: 10000,
+                    timeout: 15000,
                 }
+            );
+
+            console.log(
+                "[Scraper] Price appeared successfully"
             );
         } catch {
             console.log(
@@ -650,7 +583,7 @@ async function scrapeWithPlaywright(
         }
 
         /* -----------------------------------------
-           EXTRACT DATA
+           EXTRACT PRICE / MRP / STOCK
         ----------------------------------------- */
 
         const priceData =
@@ -661,27 +594,19 @@ async function scrapeWithPlaywright(
                     saleClass,
                     mrpClass,
                     priceTag,
+                    priceWrapClass,
                 }) => {
-                    const cleanText = (
-                        text
-                    ) => {
-                        return String(
-                            text || ""
-                        )
+                    const cleanText = (text) => {
+                        return String(text || "")
                             .replace(
                                 /[\u200B-\u200D\u2060\u00A0]/g,
                                 " "
                             )
-                            .replace(
-                                /\s+/g,
-                                " "
-                            )
+                            .replace(/\s+/g, " ")
                             .trim();
                     };
 
-                    const parsePrice = (
-                        text
-                    ) => {
+                    const parsePrice = (text) => {
                         if (!text) {
                             return null;
                         }
@@ -700,23 +625,19 @@ async function scrapeWithPlaywright(
 
                         const value =
                             Number(
-                                match[1]
-                                    .replace(
-                                        /,/g,
-                                        ""
-                                    )
+                                match[1].replace(
+                                    /,/g,
+                                    ""
+                                )
                             );
 
-                        return Number.isFinite(
-                            value
-                        ) && value > 0
+                        return Number.isFinite(value) &&
+                            value > 0
                             ? value
                             : null;
                     };
 
-                    const isVisible = (
-                        element
-                    ) => {
+                    const isVisible = (element) => {
                         if (!element) {
                             return false;
                         }
@@ -733,202 +654,150 @@ async function scrapeWithPlaywright(
                             element.getAttribute(
                                 "aria-hidden"
                             ) !== "true" &&
-
-                            style.display !==
-                            "none" &&
-
-                            style.visibility !==
-                            "hidden" &&
-
-                            style.opacity !==
-                            "0" &&
-
+                            style.display !== "none" &&
+                            style.visibility !== "hidden" &&
+                            style.opacity !== "0" &&
                             rect.width > 0 &&
                             rect.height > 0
                         );
                     };
 
                     /* --------------------------------
-                       CURRENT PRICE
+                       PRICE CANDIDATES
                     -------------------------------- */
 
                     const selectors = [
                         `.${priceValueClass}`,
                         `.${saleClass}`,
-                        `.${priceTag}`,
+                        `.${priceWrapClass} output`,
+                        `.${priceWrapClass} .price-status`,
                         ".price-main",
-                        ".price-success output",
-                        ".price-block output",
+                        ".price-success",
                         "output",
                     ];
 
                     const candidates = [];
 
-                    for (
-                        const selector of selectors
-                    ) {
+                    for (const selector of selectors) {
                         document
-                            .querySelectorAll(
-                                selector
-                            )
-                            .forEach(
-                                (element) => {
-                                    if (
-                                        isVisible(
-                                            element
-                                        ) &&
-                                        !candidates.includes(
-                                            element
-                                        )
-                                    ) {
-                                        candidates.push(
-                                            element
-                                        );
-                                    }
+                            .querySelectorAll(selector)
+                            .forEach((element) => {
+                                if (
+                                    isVisible(element) &&
+                                    !candidates.includes(element)
+                                ) {
+                                    candidates.push(element);
                                 }
-                            );
+                            });
                     }
 
                     const validCandidates =
-                        candidates.filter(
-                            (element) => {
-                                const text =
-                                    cleanText(
-                                        element.textContent
-                                    );
-
-                                if (!text) {
-                                    return false;
-                                }
-
-                                const className =
-                                    typeof element.className ===
-                                        "string"
-                                        ? element.className
-                                        : "";
-
-                                /* Ignore MRP */
-                                if (
-                                    className
-                                        .split(
-                                            /\s+/
-                                        )
-                                        .includes(
-                                            mrpClass
-                                        )
-                                ) {
-                                    return false;
-                                }
-
-                                /* Ignore old prices */
-                                if (
-                                    /mrp|original price|deal price|old price/i.test(
-                                        text
-                                    )
-                                ) {
-                                    return false;
-                                }
-
-                                const style =
-                                    window.getComputedStyle(
-                                        element
-                                    );
-
-                                if (
-                                    style.textDecorationLine.includes(
-                                        "line-through"
-                                    )
-                                ) {
-                                    return false;
-                                }
-
-                                return (
-                                    parsePrice(
-                                        text
-                                    ) !== null
+                        candidates.filter((element) => {
+                            const text =
+                                cleanText(
+                                    element.textContent
                                 );
+
+                            if (!text) {
+                                return false;
                             }
-                        );
 
-                    /* --------------------------------
-                       SORT PRICE CANDIDATES
-                    -------------------------------- */
-
-                    validCandidates.sort(
-                        (a, b) => {
-                            const aClass =
-                                typeof a.className ===
+                            const className =
+                                typeof element.className ===
                                     "string"
-                                    ? a.className
+                                    ? element.className
                                     : "";
-
-                            const bClass =
-                                typeof b.className ===
-                                    "string"
-                                    ? b.className
-                                    : "";
-
-                            const aPriority =
-                                aClass.includes(
-                                    priceValueClass
-                                )
-                                    ? 0
-                                    : aClass.includes(
-                                        saleClass
-                                    )
-                                        ? 1
-                                        : 2;
-
-                            const bPriority =
-                                bClass.includes(
-                                    priceValueClass
-                                )
-                                    ? 0
-                                    : bClass.includes(
-                                        saleClass
-                                    )
-                                        ? 1
-                                        : 2;
 
                             if (
-                                aPriority !==
-                                bPriority
+                                className
+                                    .split(/\s+/)
+                                    .includes(mrpClass)
                             ) {
-                                return (
-                                    aPriority -
-                                    bPriority
-                                );
+                                return false;
                             }
 
-                            const aSize =
-                                parseFloat(
-                                    window
-                                        .getComputedStyle(
-                                            a
-                                        )
-                                        .fontSize
-                                ) || 0;
+                            if (
+                                /price hidden|hover over|reveal price/i.test(
+                                    text
+                                )
+                            ) {
+                                return false;
+                            }
 
-                            const bSize =
-                                parseFloat(
-                                    window
-                                        .getComputedStyle(
-                                            b
-                                        )
-                                        .fontSize
-                                ) || 0;
+                            const style =
+                                window.getComputedStyle(
+                                    element
+                                );
+
+                            if (
+                                style.textDecorationLine.includes(
+                                    "line-through"
+                                )
+                            ) {
+                                return false;
+                            }
 
                             return (
-                                bSize - aSize
+                                parsePrice(text) !== null
+                            );
+                        });
+
+                    validCandidates.sort((a, b) => {
+                        const aClass =
+                            typeof a.className === "string"
+                                ? a.className
+                                : "";
+
+                        const bClass =
+                            typeof b.className === "string"
+                                ? b.className
+                                : "";
+
+                        const aPriority =
+                            aClass.includes(priceValueClass)
+                                ? 0
+                                : aClass.includes(saleClass)
+                                    ? 1
+                                    : 2;
+
+                        const bPriority =
+                            bClass.includes(priceValueClass)
+                                ? 0
+                                : bClass.includes(saleClass)
+                                    ? 1
+                                    : 2;
+
+                        if (
+                            aPriority !==
+                            bPriority
+                        ) {
+                            return (
+                                aPriority -
+                                bPriority
                             );
                         }
-                    );
+
+                        const aSize =
+                            parseFloat(
+                                window
+                                    .getComputedStyle(a)
+                                    .fontSize
+                            ) || 0;
+
+                        const bSize =
+                            parseFloat(
+                                window
+                                    .getComputedStyle(b)
+                                    .fontSize
+                            ) || 0;
+
+                        return bSize - aSize;
+                    });
 
                     let price = null;
 
                     if (
-                        validCandidates.length >
-                        0
+                        validCandidates.length > 0
                     ) {
                         price =
                             parsePrice(
@@ -938,11 +807,40 @@ async function scrapeWithPlaywright(
                     }
 
                     /* --------------------------------
+                       FALLBACK: SEARCH PRICE BLOCK
+                    -------------------------------- */
+
+                    if (price === null) {
+                        const priceBlock =
+                            document.querySelector(
+                                `.${priceWrapClass}`
+                            );
+
+                        if (priceBlock) {
+                            const text =
+                                cleanText(
+                                    priceBlock.textContent
+                                );
+
+                            const match =
+                                text.match(
+                                    /(?:₹|Rs\.?|INR)\s*[\d,]+(?:\.\d{1,2})?/
+                                );
+
+                            if (match) {
+                                price =
+                                    parsePrice(
+                                        match[0]
+                                    );
+                            }
+                        }
+                    }
+
+                    /* --------------------------------
                        MRP
                     -------------------------------- */
 
-                    let originalPrice =
-                        null;
+                    let originalPrice = null;
 
                     const mrpElement =
                         document.querySelector(
@@ -951,9 +849,7 @@ async function scrapeWithPlaywright(
 
                     if (
                         mrpElement &&
-                        isVisible(
-                            mrpElement
-                        )
+                        isVisible(mrpElement)
                     ) {
                         originalPrice =
                             parsePrice(
@@ -974,20 +870,15 @@ async function scrapeWithPlaywright(
 
                     if (
                         stockElement &&
-                        isVisible(
-                            stockElement
-                        )
+                        isVisible(stockElement)
                     ) {
                         const stockText =
                             cleanText(
-                                stockElement
-                                    .textContent
+                                stockElement.textContent
                             );
 
                         const stockMatch =
-                            stockText.match(
-                                /\d+/
-                            );
+                            stockText.match(/\d+/);
 
                         if (stockMatch) {
                             stock =
@@ -1011,22 +902,17 @@ async function scrapeWithPlaywright(
                         candidates:
                             validCandidates
                                 .slice(0, 10)
-                                .map(
-                                    (
-                                        element
-                                    ) => ({
-                                        text:
-                                            cleanText(
-                                                element.textContent
-                                            ),
-
-                                        className:
-                                            typeof element.className ===
-                                                "string"
-                                                ? element.className
-                                                : "",
-                                    })
-                                ),
+                                .map((element) => ({
+                                    text:
+                                        cleanText(
+                                            element.textContent
+                                        ),
+                                    className:
+                                        typeof element.className ===
+                                            "string"
+                                            ? element.className
+                                            : "",
+                                })),
                     };
                 },
                 {
@@ -1035,6 +921,7 @@ async function scrapeWithPlaywright(
                     saleClass,
                     mrpClass,
                     priceTag,
+                    priceWrapClass,
                 }
             );
 
@@ -1065,7 +952,7 @@ async function scrapeWithPlaywright(
         );
 
         /* -----------------------------------------
-           VALIDATE
+           VALIDATE PRICE
         ----------------------------------------- */
 
         if (
@@ -1081,7 +968,8 @@ async function scrapeWithPlaywright(
             price: priceData.price,
             originalPrice:
                 priceData.originalPrice,
-            stock: priceData.stock,
+            stock:
+                priceData.stock,
         };
     } catch (error) {
         console.error(
@@ -1115,7 +1003,7 @@ async function scrapeProductPrice(
     let lastError = null;
 
     /* -----------------------------------------
-       FETCH LAYOUT ONCE
+       FETCH LAYOUT
     ----------------------------------------- */
 
     let layout;
@@ -1130,21 +1018,15 @@ async function scrapeProductPrice(
         return {
             success: false,
             productId,
-
             price: null,
             originalPrice: null,
             stock: null,
-
             scrapedAt:
                 new Date().toISOString(),
-
             duration:
                 Date.now() - startTime,
-
             attempt: 0,
-
             method: "playwright",
-
             error:
                 `Layout fetch failed: ${error.message}`,
         };
@@ -1183,23 +1065,16 @@ async function scrapeProductPrice(
                 return {
                     success: true,
                     productId,
-
                     price: result.price,
-
                     originalPrice:
                         result.originalPrice,
-
                     stock:
                         result.stock,
-
                     scrapedAt:
                         new Date().toISOString(),
-
                     duration:
                         Date.now() - startTime,
-
                     attempt,
-
                     method: "playwright",
                 };
             }
@@ -1219,8 +1094,7 @@ async function scrapeProductPrice(
                 attempt < maxRetries
             ) {
                 const waitMs =
-                    Math.pow(2, attempt) *
-                    1000;
+                    Math.pow(2, attempt) * 1000;
 
                 console.log(
                     `[Scraper] Retrying in ${waitMs}ms`
@@ -1244,21 +1118,15 @@ async function scrapeProductPrice(
     return {
         success: false,
         productId,
-
         price: null,
         originalPrice: null,
         stock: null,
-
         scrapedAt:
             new Date().toISOString(),
-
         duration:
             Date.now() - startTime,
-
         attempt: maxRetries,
-
         method: "playwright",
-
         error:
             lastError?.message ||
             "Unknown scraping error",
